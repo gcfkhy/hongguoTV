@@ -192,6 +192,36 @@ class HomeFeedScreenTest {
     }
 
     @Test
+    @Config(qualifiers = "w360dp-h800dp-port-mdpi")
+    fun phoneHomeFeedHidesRemoteHints() {
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        val activity = controller.get()
+        val screen =
+            HomeFeedScreen(
+                activity,
+                DramaFeedState(),
+                listOf(TextView(activity)),
+                {},
+                { _, _ -> },
+                { "收藏" },
+                Backend(2),
+                Playback(activity, prefetchEnabled = false),
+            )
+        try {
+            activity.setContentView(screen)
+            screen.start(true, false)
+            pump(screen)
+            val copy = texts(screen).joinToString("\n") { it.text }
+            assertFalse(copy.contains("↑ ↓"))
+            assertFalse(copy.contains("确定  打开操作"))
+            assertTrue(copy.contains("上滑换一部") || copy.contains("观看全集"))
+        } finally {
+            screen.close()
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test
     fun rapidSwitchesOnlyPrepareTheFinalUncachedWorkAndLeavingCancelsTheDelay() {
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         val activity = controller.get()
@@ -429,6 +459,7 @@ class HomeFeedScreenTest {
     }
 
     @Test
+    @Config(qualifiers = "w960dp-h540dp-land-television-mdpi")
     fun remoteSwitchesWorksAndCompletionDoesNotAdvance() {
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         val activity = controller.get()

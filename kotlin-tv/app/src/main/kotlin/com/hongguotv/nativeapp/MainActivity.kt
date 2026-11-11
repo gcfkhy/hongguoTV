@@ -450,24 +450,71 @@ class MainActivity : Activity() {
         return view
     }
 
+    private fun applyPhoneCatalogChrome(container: LinearLayout, top: LinearLayout, divider: View) {
+        if (!DeviceUi.phone(this)) return
+        top.visibility = View.GONE
+        divider.visibility = View.GONE
+        if (tab in 3..6) {
+            val me = row().apply { setPadding(dp(8), dp(10), dp(8), dp(6)) }
+            listOf(3 to "收藏", 4 to "历史", 5 to "预约", 6 to "设置").forEach { (index, label) ->
+                val item = addButton(me, label, index == tab) { switchTab(index) }
+                item.gravity = Gravity.CENTER
+                item.textSize = 14f
+                (item.layoutParams as LinearLayout.LayoutParams).apply {
+                    width = 0
+                    weight = 1f
+                    rightMargin = dp(6)
+                }
+            }
+            container.addView(me)
+        }
+        container.setPadding(
+            if (tab == 0) 0 else dp(12),
+            if (tab == 0) 0 else dp(8),
+            if (tab == 0) 0 else dp(12),
+            dp(56),
+        )
+        root.addView(phoneBottomBar(), FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+    }
+
+    private fun phoneBottomBar(): LinearLayout {
+        val bar =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                setBackgroundColor(Color.rgb(16, 21, 30))
+                setPadding(dp(6), dp(6), dp(6), dp(8))
+            }
+        listOf(
+            Triple("首页", tab == 0, 0),
+            Triple("找剧", tab == 1, 1),
+            Triple("排行榜", tab == 2, 2),
+            Triple("我的", tab in 3..6, 3),
+        ).forEach { (label, on, target) ->
+            val view = button(label, on) { if (tab != target) switchTab(target) }
+            view.gravity = Gravity.CENTER
+            view.textSize = 13f
+            view.minHeight = dp(44)
+            bar.addView(view, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(4) })
+        }
+        return bar
+    }
+
     // 启动入口：创建根容器，初始化账户、更新和媒体控制，再异步读取本机记录。
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         ContentRepository.deviceStore = PreferencesPlayerDeviceStore(
             getSharedPreferences("native-player-device", MODE_PRIVATE)
         )
+        requestedOrientation = DeviceUi.preferredOrientation(this)
         if (DeviceUi.television(this)) {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             window.decorView.systemUiVisibility =
                 View.SYSTEM_UI_FLAG_FULLSCREEN or
                     View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
                     View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        } else {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER
-            if (Build.VERSION.SDK_INT >= 21) {
-                window.statusBarColor = bg
-                window.navigationBarColor = bg
-            }
+        } else if (Build.VERSION.SDK_INT >= 21) {
+            window.statusBarColor = bg
+            window.navigationBarColor = bg
         }
         librarySources = LibrarySources(this)
         library = Library(this)
@@ -605,9 +652,11 @@ class MainActivity : Activity() {
         root.background = TvVisual.backdrop(this)
         val container = column()
         val television = DeviceUi.television(this)
-        val horizontal = if (television) dp(widthDp() * .05f) else dp(12)
+        val phone = DeviceUi.phone(this)
+        val horizontal = if (television) dp(widthDp() * .05f) else if (phone) 0 else dp(12)
         val vertical =
-            if (television) (resources.displayMetrics.heightPixels * .05f).toInt() else dp(8)
+            if (television) (resources.displayMetrics.heightPixels * .05f).toInt()
+            else if (phone) 0 else dp(8)
         container.setPadding(horizontal, vertical, horizontal, vertical)
         container.fitsSystemWindows = !television
         root.addView(container, FrameLayout.LayoutParams(-1, -1))
@@ -961,10 +1010,10 @@ class MainActivity : Activity() {
             nav += item
         }
         container.addView(top)
-        container.addView(
-            View(this).apply { setBackgroundColor(TvStyle.outline) },
-            lp(-1, dp(1)).apply { bottomMargin = dp(6) },
-        )
+        val divider =
+            View(this).apply { setBackgroundColor(TvStyle.outline) }
+        container.addView(divider, lp(-1, dp(1)).apply { bottomMargin = dp(6) })
+        applyPhoneCatalogChrome(container, top, divider)
         if (tab == 6) {
             val body = column()
             container.addView(body, lp(-1, 0).apply { weight = 1f })
@@ -3015,8 +3064,8 @@ class MainActivity : Activity() {
                     setKeepContentOnPlayerReset(true)
                     setShutterBackgroundColor(Color.BLACK)
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
-                    setOnClickListener { onPlayerSurfaceClick() }
                 }
+            attachPlayerGestures(view)
             playerView = view
             root.addView(view, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
             view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyVideoRotation() }
@@ -3096,7 +3145,7 @@ class MainActivity : Activity() {
                 text(
                     if (DeviceUi.television(this))
                         "确认 暂停/播放    左右 快退/快进    ↓ 选集    ↑ 操作菜单    菜单 更多"
-                    else "点画面 暂停/播放    空格暂停    左右快进退    上下或滚轮换集",
+                    else "点画面暂停  ·  上滑下一集  ·  拖动进度条",
                     13f,
                     muted,
                 ).apply { setPadding(0, dp(12), 0, 0) },
@@ -3128,7 +3177,7 @@ class MainActivity : Activity() {
         if (recoveryDisplayActive) {
             addButton(controls, "取消恢复") { stopPreparingPlayback() }
             addButton(controls, "返回选集") { returnToDetail(true) }
-        } else if (DeviceUi.touchFirst(this) && hud.visibility == View.VISIBLE) showPanel()
+        } else if (DeviceUi.touchFirst(this) && hud.visibility == View.VISIBLE) showTouchTransport()
         transportPlay = null
         sleepButton = null
         syncMediaSession()
@@ -3225,7 +3274,7 @@ class MainActivity : Activity() {
                                     requestedAutoplay = false
                                     p.pause()
                                     playbackText.text = "本集已结束"
-                                    showPanel()
+                                    openPlaybackChrome()
                                     if (continueSeason && foreground && !pausedForLifecycle && !sleepStopped && library.autoNext &&
                                         episodeIndex == data.episodes.lastIndex) finishSeason(data)
                                 }
@@ -4246,7 +4295,7 @@ class MainActivity : Activity() {
         if (screen != "player" || playError || DeviceUi.television(this)) return
         if (hud.visibility != View.VISIBLE) {
             showHud()
-            if (!panel) showPanel()
+            if (!panel) openPlaybackChrome()
         } else togglePlayback()
     }
 
@@ -4256,7 +4305,8 @@ class MainActivity : Activity() {
         hud.visibility = View.VISIBLE
         updateClock()
         updatePlaybackText()
-        if (DeviceUi.touchFirst(this) && !playError && !recoveryDisplayActive && !panel) showPanel()
+        if (DeviceUi.touchFirst(this) && !playError && !recoveryDisplayActive && !panel)
+            showTouchTransport()
         main.removeCallbacks(hideHud)
         if (player?.isPlaying == true) main.postDelayed(hideHud, if (panel) 8000 else 4500)
     }
@@ -4320,7 +4370,7 @@ class MainActivity : Activity() {
         showHud()
         updatePlaybackText()
         syncMediaSession()
-        if (panel && episodePanel == null) showPanel()
+        if (panel && episodePanel == null) openPlaybackChrome()
     }
 
     private fun togglePlayback() =
@@ -4390,7 +4440,7 @@ class MainActivity : Activity() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         playbackText.text = "定时停止已生效 · 观看位置已保存 · 按播放可继续"
         showHud()
-        if (!playError && episodePanel == null) showPanel()
+        if (!playError && episodePanel == null) openPlaybackChrome()
         syncMediaSession()
         Toast.makeText(this, "定时停止已生效", Toast.LENGTH_LONG).show()
     }
@@ -4493,6 +4543,59 @@ class MainActivity : Activity() {
         main.postDelayed(seekRunnable, 250)
         updatePlaybackText()
         showHud()
+    }
+
+    private fun attachPlayerGestures(view: PlayerView) {
+        if (DeviceUi.television(this)) {
+            view.setOnClickListener { onPlayerSurfaceClick() }
+            return
+        }
+        val detector =
+            GestureDetector(
+                this,
+                object : GestureDetector.SimpleOnGestureListener() {
+                    override fun onDown(e: MotionEvent) = true
+
+                    override fun onSingleTapUp(e: MotionEvent): Boolean {
+                        onPlayerSurfaceClick()
+                        return true
+                    }
+
+                    override fun onFling(
+                        e1: MotionEvent?,
+                        e2: MotionEvent,
+                        velocityX: Float,
+                        velocityY: Float,
+                    ): Boolean {
+                        val delta = PlaybackInput.verticalFlingDelta(velocityY)
+                        if (delta == 0) return false
+                        skipEpisode(delta)
+                        return true
+                    }
+                },
+            )
+        view.setOnTouchListener { _, event -> detector.onTouchEvent(event) }
+    }
+
+    private fun showTouchTransport() {
+        if (playError) return
+        panel = true
+        showHud()
+        controls.visibility = View.VISIBLE
+        controls.removeAllViews()
+        val transport = row()
+        controls.addView(transport)
+        transportPlay =
+            addButton(transport, if (player?.playWhenReady == true) "暂停" else "播放") { togglePlayback() }
+        addButton(transport, "上一集") { skipEpisode(-1) }
+        addButton(transport, "下一集") { skipEpisode(1) }
+        lateinit var episodes: TextView
+        episodes = addButton(transport, "选集") { showEpisodePanel(episodes) }
+        addButton(transport, "倍速") { showSpeedPicker(transportPlay ?: episodes) }
+    }
+
+    private fun openPlaybackChrome() {
+        if (DeviceUi.touchFirst(this)) showTouchTransport() else showPanel()
     }
 
     private fun showPanel() {
@@ -4762,7 +4865,7 @@ class MainActivity : Activity() {
         }, { if (token == seasonGeneration) {
             cancelNextSeason()
             playbackText.text = "下一季暂时无法加载，请稍后手动选择"
-            showPanel()
+            openPlaybackChrome()
         } })
     }
 

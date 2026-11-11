@@ -6,18 +6,24 @@ package com.hongguotv.nativeapp
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.text.TextUtils
+import android.view.GestureDetector
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.widget.*
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 import com.hongguotv.core.*
 import java.io.Closeable
 import java.util.concurrent.Executors
 
 /** 独立首页试播，不写入本机观看记录，也不上传账户进度。 */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 internal class HomeFeedScreen(
     private val activity: Activity,
     private val state: DramaFeedState,
@@ -77,6 +83,8 @@ internal class HomeFeedScreen(
     private val recommendButton: TextView
     private val comicButton: TextView
     private val realButton: TextView
+    private val form = DeviceUi.form(activity)
+    private val remote = form == DeviceUi.Form.Television
 
     private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
 
@@ -149,12 +157,13 @@ internal class HomeFeedScreen(
             b.nextFocusLeftId = typeChoices.getOrNull(i - 1)?.id ?: b.id
             b.nextFocusRightId = typeChoices.getOrNull(i + 1)?.id ?: b.id
         }
-        addView(types, lp(-1, dp(48)))
-        val content = LinearLayout(activity)
         stage.enableRemoteFocus()
         stage.isClickable = true
-        stage.setPadding(dp(3), dp(3), dp(3), dp(3))
-        stage.background = TvStyle.shape(activity, Color.BLACK)
+        stage.setPadding(if (remote) dp(3) else 0, if (remote) dp(3) else 0, if (remote) dp(3) else 0, if (remote) dp(3) else 0)
+        stage.background = TvStyle.shape(activity, Color.BLACK, radius = if (remote) 10 else 0)
+        (playback.view as? PlayerView)?.resizeMode =
+            if (form == DeviceUi.Form.Phone) AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            else AspectRatioFrameLayout.RESIZE_MODE_FIT
         stage.addView(playback.view, FrameLayout.LayoutParams(-1, -1))
         tag.setPadding(dp(12), dp(8), dp(12), dp(8))
         tag.background = TvStyle.shape(activity, Color.argb(210, 11, 15, 21))
@@ -169,40 +178,17 @@ internal class HomeFeedScreen(
         status.background = TvStyle.shape(activity, Color.argb(215, 11, 15, 21))
         stage.addView(
             status,
-            FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply {
-                setMargins(dp(10), 0, dp(10), dp(10))
+            FrameLayout.LayoutParams(-1, -2, Gravity.CENTER).apply {
+                setMargins(dp(16), dp(16), dp(16), dp(16))
             },
         )
-        content.addView(
-            stage,
-            lp(0, -1).apply {
-                weight = 2.2f
-                rightMargin = dp(22)
-            },
-        )
-        val info =
-            LinearLayout(activity).apply {
-                orientation = VERTICAL
-                setPadding(0, dp(14), 0, dp(10))
-            }
         title.typeface = Typeface.DEFAULT_BOLD
-        title.maxLines = 3
+        title.maxLines = if (form == DeviceUi.Form.Phone) 2 else 3
         title.ellipsize = TextUtils.TruncateAt.END
-        info.addView(title)
         meta.maxLines = 2
-        meta.setPadding(0, dp(12), 0, dp(12))
-        info.addView(meta)
-        intro.maxLines = 6
+        meta.setPadding(0, dp(8), 0, dp(8))
+        intro.maxLines = if (form == DeviceUi.Form.Phone) 2 else 6
         intro.ellipsize = TextUtils.TruncateAt.END
-        info.addView(intro)
-        info.addView(Space(activity), lp(1, 0).apply { weight = 1f })
-        info.addView(
-            label("↑ ↓  换一部\n确定  打开操作\n返回  顶部导航", 13f, TvStyle.muted).apply {
-                setLineSpacing(dp(6).toFloat(), 1f)
-            }
-        )
-        content.addView(info, lp(0, -1).apply { weight = 1f })
-        addView(content, lp(-1, 0).apply { weight = 1f })
         pauseButton = button("暂停试播") { toggle() }
         watchButton =
             button("观看全集") {
@@ -237,8 +223,7 @@ internal class HomeFeedScreen(
             b.nextFocusDownId = b.id
         }
         actions.setPadding(0, dp(10), 0, 0)
-        actions.visibility = View.GONE
-        addView(actions)
+        assembleFeedLayout(types)
         stage.nextFocusLeftId = stage.id
         stage.nextFocusRightId = stage.id
         stage.nextFocusUpId = stage.id
@@ -250,25 +235,15 @@ internal class HomeFeedScreen(
                     .id
         }
         stage.setOnFocusChangeListener { _, focused ->
-            stage.background = TvStyle.shape(activity, Color.BLACK, if (focused) TvVisual.focusedValue else TvStyle.outline)
+            if (remote)
+                stage.background =
+                    TvStyle.shape(
+                        activity,
+                        Color.BLACK,
+                        if (focused) TvVisual.focusedValue else TvStyle.outline,
+                    )
         }
-        stage.setOnClickListener { showActions() }
-        stage.setOnKeyListener { _, key, event ->
-            when (key) {
-                KeyEvent.KEYCODE_DPAD_UP,
-                KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0)
-                        move(if (key == KeyEvent.KEYCODE_DPAD_UP) -1 else 1)
-                    true
-                }
-                KeyEvent.KEYCODE_DPAD_CENTER,
-                KeyEvent.KEYCODE_ENTER -> {
-                    if (event.action == KeyEvent.ACTION_UP) showActions()
-                    true
-                }
-                else -> false
-            }
-        }
+        bindStageInput()
         playback.onError = { error -> lastPlaybackError = error }
         playback.status = { value ->
             if (!closed && clip != null)
@@ -289,9 +264,11 @@ internal class HomeFeedScreen(
                         remember()
                         state.ended = true
                         state.userPaused = true
-                        status.text = "本集试播结束 · 看全集或按 ↓ 换一部"
+                        status.text =
+                            if (remote) "本集试播结束 · 看全集或按 ↓ 换一部"
+                            else "本集试播结束 · 看全集或上滑换一部"
                         paintActions()
-                        if (active && stage.hasFocus()) showActions()
+                        if (active && remote && stage.hasFocus()) showActions()
                     }
                     TrialStatus.ERROR -> {
                         playback.pause()
@@ -306,6 +283,145 @@ internal class HomeFeedScreen(
         }
         describe()
         paintActions()
+    }
+
+    private fun assembleFeedLayout(types: LinearLayout) {
+        when (form) {
+            DeviceUi.Form.Phone -> {
+                tag.visibility = View.GONE
+                val overlay = FrameLayout(activity)
+                overlay.addView(stage, FrameLayout.LayoutParams(-1, -1))
+                types.setPadding(dp(10), dp(10), dp(10), dp(6))
+                types.setBackgroundColor(Color.argb(120, 11, 15, 21))
+                overlay.addView(types, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+                val caption =
+                    LinearLayout(activity).apply {
+                        orientation = VERTICAL
+                        setPadding(dp(16), dp(28), dp(16), dp(16))
+                        background =
+                            GradientDrawable(
+                                GradientDrawable.Orientation.BOTTOM_TOP,
+                                intArrayOf(Color.argb(230, 11, 15, 21), Color.TRANSPARENT),
+                            )
+                    }
+                caption.addView(title)
+                caption.addView(meta)
+                caption.addView(intro)
+                caption.addView(
+                    label("上滑换一部  ·  点画面暂停", 12f, TvStyle.muted).apply {
+                        setPadding(0, dp(6), 0, dp(4))
+                    },
+                )
+                actions.visibility = View.VISIBLE
+                caption.addView(actions)
+                overlay.addView(caption, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+                addView(overlay, lp(-1, 0).apply { weight = 1f })
+            }
+            DeviceUi.Form.Tablet -> {
+                addView(types, lp(-1, dp(48)))
+                val content = LinearLayout(activity)
+                content.addView(
+                    stage,
+                    lp(0, -1).apply {
+                        weight = 3f
+                        rightMargin = dp(16)
+                    },
+                )
+                val info =
+                    LinearLayout(activity).apply {
+                        orientation = VERTICAL
+                        setPadding(0, dp(8), 0, dp(8))
+                    }
+                info.addView(title)
+                info.addView(meta)
+                info.addView(intro)
+                info.addView(Space(activity), lp(1, 0).apply { weight = 1f })
+                info.addView(label("上下滑动换一部  ·  点画面暂停  ·  点看全集", 13f, TvStyle.muted))
+                content.addView(info, lp(0, -1).apply { weight = 1f })
+                addView(content, lp(-1, 0).apply { weight = 1f })
+                actions.visibility = View.VISIBLE
+                addView(actions)
+            }
+            DeviceUi.Form.Television -> {
+                addView(types, lp(-1, dp(48)))
+                val content = LinearLayout(activity)
+                content.addView(
+                    stage,
+                    lp(0, -1).apply {
+                        weight = 2.2f
+                        rightMargin = dp(22)
+                    },
+                )
+                val info =
+                    LinearLayout(activity).apply {
+                        orientation = VERTICAL
+                        setPadding(0, dp(14), 0, dp(10))
+                    }
+                info.addView(title)
+                info.addView(meta)
+                info.addView(intro)
+                info.addView(Space(activity), lp(1, 0).apply { weight = 1f })
+                info.addView(
+                    label("↑ ↓  换一部\n确定  打开操作\n返回  顶部导航", 13f, TvStyle.muted).apply {
+                        setLineSpacing(dp(6).toFloat(), 1f)
+                    },
+                )
+                content.addView(info, lp(0, -1).apply { weight = 1f })
+                addView(content, lp(-1, 0).apply { weight = 1f })
+                actions.visibility = View.GONE
+                addView(actions)
+            }
+        }
+    }
+
+    private fun bindStageInput() {
+        stage.setOnKeyListener { _, key, event ->
+            when (key) {
+                KeyEvent.KEYCODE_DPAD_UP,
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0)
+                        move(if (key == KeyEvent.KEYCODE_DPAD_UP) -1 else 1)
+                    true
+                }
+                KeyEvent.KEYCODE_DPAD_CENTER,
+                KeyEvent.KEYCODE_ENTER -> {
+                    if (event.action == KeyEvent.ACTION_UP) {
+                        if (remote) showActions() else toggle()
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+        if (remote) {
+            stage.setOnClickListener { showActions() }
+            return
+        }
+        val detector =
+            GestureDetector(
+                activity,
+                object : GestureDetector.SimpleOnGestureListener() {
+                    override fun onDown(e: MotionEvent) = true
+
+                    override fun onSingleTapUp(e: MotionEvent): Boolean {
+                        toggle()
+                        return true
+                    }
+
+                    override fun onFling(
+                        e1: MotionEvent?,
+                        e2: MotionEvent,
+                        velocityX: Float,
+                        velocityY: Float,
+                    ): Boolean {
+                        val delta = PlaybackInput.verticalFlingDelta(velocityY)
+                        if (delta == 0) return false
+                        move(delta)
+                        return true
+                    }
+                },
+            )
+        stage.setOnTouchListener { _, event -> detector.onTouchEvent(event) }
     }
 
     // 设置进入首页时的初始焦点，并在应用位于前台时启动试播流程。
@@ -347,7 +463,7 @@ internal class HomeFeedScreen(
     }
 
     fun back(): Boolean {
-        if (actions.visibility != View.VISIBLE) return false
+        if (!remote || actions.visibility != View.VISIBLE) return false
         actions.visibility = View.GONE
         stage.requestFocus()
         return true
@@ -396,7 +512,9 @@ internal class HomeFeedScreen(
                     .filter(String::isNotBlank)
                     .joinToString(" · ")
         intro.text =
-            series?.description?.ifBlank { "先试试看，喜欢这部作品就选择观看全集。" } ?: "选择漫剧或真人剧，上下换一部，找到想追的故事。"
+            series?.description?.ifBlank {
+                if (remote) "先试试看，喜欢这部作品就选择观看全集。" else "喜欢就看全集，上滑换下一部。"
+            } ?: if (remote) "选择漫剧或真人剧，上下换一部，找到想追的故事。" else "上滑刷下一部，点画面暂停，点看全集开始追。"
         tag.text = if (state.recommendation) "推荐 · 第一集试播" else "${state.category.label}推荐 · 第一集试播"
         paintActions()
     }
@@ -571,7 +689,7 @@ internal class HomeFeedScreen(
                             status.text = "推荐接口未返回新作品 · 最近已去重 ${error.rememberedCount} 部\n可稍后换一批，或切换漫剧、真人剧继续发现"
                         } else if (recoverTrial && trialRecoveryAttempts > 0) {
                             val detail = diagnosticDetail(error)?.take(180)
-                            status.text = "试播恢复未成功 · ${playbackFailureSummary(error)}\n可重试试播或按 ↑ ↓ 换一部" +
+                            status.text = "试播恢复未成功 · ${playbackFailureSummary(error)}\n可重试试播或${if (remote) "按 ↑ ↓" else "上滑"}换一部" +
                                 (detail?.let { "\n$it" } ?: "")
                         } else status.text = "暂时无法加载 · ${message.ifBlank { "请重试或换一部" }}"
                         paintActions()
@@ -868,7 +986,7 @@ internal class HomeFeedScreen(
         clearCurrent()
         state.select(category)
         clearCache()
-        actions.visibility = View.GONE
+        if (remote) actions.visibility = View.GONE
         stage.requestFocus()
         describe()
         if (state.current != null) loadCurrent() else loadPage(false)

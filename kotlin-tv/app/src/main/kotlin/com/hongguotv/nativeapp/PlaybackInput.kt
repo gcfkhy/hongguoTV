@@ -38,4 +38,12 @@ object PlaybackInput {
             axisVscroll < 0f -> 1
             else -> 0
         }
+
+    /** Finger flicking up (negative Y velocity) goes to the next video. */
+    fun verticalFlingDelta(velocityY: Float, minVelocity: Float = 900f): Int =
+        when {
+            velocityY <= -minVelocity -> 1
+            velocityY >= minVelocity -> -1
+            else -> 0
+        }
 }

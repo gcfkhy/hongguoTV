@@ -67,6 +67,31 @@ class PlaybackInputTest {
         assertEquals(-1, PlaybackInput.wheelEpisodeDelta(1f))
         assertEquals(1, PlaybackInput.wheelEpisodeDelta(-1f))
         assertEquals(0, PlaybackInput.wheelEpisodeDelta(0f))
+        assertEquals(1, PlaybackInput.verticalFlingDelta(-1200f))
+        assertEquals(-1, PlaybackInput.verticalFlingDelta(1200f))
+        assertEquals(0, PlaybackInput.verticalFlingDelta(100f))
+    }
+
+    @Test
+    @Config(sdk = [26], qualifiers = "w360dp-h800dp-port-mdpi")
+    fun phoneDefaultsToPortrait() {
+        val context = RuntimeEnvironment.getApplication()
+        assertEquals(DeviceUi.Form.Phone, DeviceUi.form(context))
+        assertEquals(
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT,
+            DeviceUi.preferredOrientation(context),
+        )
+    }
+
+    @Test
+    @Config(sdk = [26], qualifiers = "sw720dp-w1280dp-h800dp-land-mdpi")
+    fun tabletDefaultsToLandscape() {
+        val context = RuntimeEnvironment.getApplication()
+        assertEquals(DeviceUi.Form.Tablet, DeviceUi.form(context))
+        assertEquals(
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+            DeviceUi.preferredOrientation(context),
+        )
     }
 
     @Test
