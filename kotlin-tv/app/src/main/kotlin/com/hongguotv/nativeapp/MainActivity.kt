@@ -4999,7 +4999,10 @@ class MainActivity : Activity() {
 
     private fun createTouchPage(target: TouchTab, segment: Int): TouchPage {
         tab = legacyTabIndex(target, segment)
-        return PlaceholderPage("开发中")
+        return when (target) {
+            TouchTab.Discover -> DiscoverPage(HostBridge(), segment)
+            else -> PlaceholderPage("开发中")
+        }
     }
 
     private fun legacyTabIndex(target: TouchTab, segment: Int): Int =

@@ -38,6 +38,8 @@ internal class PosterGridView(context: Context, private val host: TouchHost) : F
     private var nearEndFired = false
     private var stateView: View? = null
 
+    internal val itemCount: Int get() = items.size
+
     internal val scrollListener =
         object : AbsListView.OnScrollListener {
             override fun onScroll(
