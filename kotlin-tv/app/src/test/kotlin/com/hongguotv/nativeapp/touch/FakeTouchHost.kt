@@ -10,6 +10,7 @@ import com.hongguotv.core.Series
 import com.hongguotv.nativeapp.AccountController
 import com.hongguotv.nativeapp.ArtworkLoader
 import com.hongguotv.nativeapp.Library
+import com.hongguotv.nativeapp.LibrarySources
 
 /** Shared fake for touch page tests: runs work inline and records outward commands. */
 internal class FakeTouchHost(override val activity: Activity) : TouchHost {
@@ -18,6 +19,7 @@ internal class FakeTouchHost(override val activity: Activity) : TouchHost {
     override val repository = ContentRepository()
     override val artwork = ArtworkLoader(activity)
     override val sheet = TouchSheet(activity)
+    override val sources = LibrarySources(activity)
 
     val opened = mutableListOf<Pair<Series, Boolean>>()
     val accountFavoriteCalls = mutableListOf<Series>()

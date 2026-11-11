@@ -5001,6 +5001,7 @@ class MainActivity : Activity() {
         tab = legacyTabIndex(target, segment)
         return when (target) {
             TouchTab.Discover -> DiscoverPage(HostBridge(), segment)
+            TouchTab.Library -> LibraryPage(HostBridge(), segment) { touchShell?.show(TouchTab.Discover) }
             else -> PlaceholderPage("开发中")
         }
     }
@@ -5024,6 +5025,7 @@ class MainActivity : Activity() {
         override val repository: ContentRepository get() = this@MainActivity.repository
         override val artwork: ArtworkLoader get() = this@MainActivity.artwork
         override val sheet: TouchSheet get() = touchSheet()
+        override val sources: LibrarySources get() = this@MainActivity.librarySources
 
         override fun <T> work(action: () -> T, done: (T) -> Unit, failed: (Throwable) -> Unit) =
             this@MainActivity.work(action, done, failed)

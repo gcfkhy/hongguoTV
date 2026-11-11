@@ -62,6 +62,7 @@ class TouchShellTest {
         override val repository = ContentRepository()
         override val artwork = ArtworkLoader(activity)
         override val sheet = TouchSheet(activity)
+        override val sources = com.hongguotv.nativeapp.LibrarySources(activity)
         var opened: Pair<Series, Boolean>? = null
 
         override fun <T> work(action: () -> T, done: (T) -> Unit, failed: (Throwable) -> Unit) = Unit

@@ -8,6 +8,7 @@ import com.hongguotv.core.Series
 import com.hongguotv.nativeapp.AccountController
 import com.hongguotv.nativeapp.ArtworkLoader
 import com.hongguotv.nativeapp.Library
+import com.hongguotv.nativeapp.LibrarySources
 
 /** Narrow seam between the touch screens and the activity that owns state and playback. */
 internal interface TouchHost {
@@ -17,6 +18,7 @@ internal interface TouchHost {
     val repository: ContentRepository
     val artwork: ArtworkLoader
     val sheet: TouchSheet
+    val sources: LibrarySources
 
     fun <T> work(action: () -> T, done: (T) -> Unit, failed: (Throwable) -> Unit)
 
