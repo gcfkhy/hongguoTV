@@ -5209,7 +5209,7 @@ class MainActivity : Activity() {
                 )
             TouchTab.Discover -> DiscoverPage(HostBridge(), segment)
             TouchTab.Library -> LibraryPage(HostBridge(), segment) { touchShell?.show(TouchTab.Discover) }
-            else -> PlaceholderPage("开发中")
+            TouchTab.Me -> MePage(HostBridge(), onCheckUpdates = { updater.show(it) })
         }
     }
 
