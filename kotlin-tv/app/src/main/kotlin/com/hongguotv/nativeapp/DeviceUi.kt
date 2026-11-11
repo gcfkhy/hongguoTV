@@ -27,10 +27,6 @@ object DeviceUi {
         else Form.Phone
     }
 
-    fun phone(context: Context) = form(context) == Form.Phone
-
-    fun tablet(context: Context) = form(context) == Form.Tablet
-
     fun preferredOrientation(context: Context): Int =
         if (television(context)) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         else ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR

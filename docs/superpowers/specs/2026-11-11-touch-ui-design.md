@@ -1,7 +1,7 @@
 # 手机 / 平板触摸界面设计
 
 日期：2026-11-11
-状态：待用户审阅
+状态：已实现
 
 ## 1. 背景与问题
 
@@ -262,3 +262,39 @@ MainActivity（现有，状态与播放引擎的拥有者）
 - **删除旧补丁可能影响电视测试**：先跑一遍电视测试基线，删除后逐项对照。
 - **工作区已有未提交改动**（`decoder-ffmpeg` 构建脚本及两个根目录下的无名文件）：
   与本任务无关，不触碰，也不纳入本任务的提交。
+
+## 14. 实现偏差
+
+实现过程中与本设计不一致、或未完成的部分，逐项记录：
+
+1. **`TouchHost` 实现方式**：`MainActivity` 用私有内部类 `HostBridge` 实现 `TouchHost`，
+   未写成 `class MainActivity(...) : TouchHost`，避免与同名私有字段 `touchSheet` 等产生
+   可见性/命名冲突。接口本身与设计一致。
+2. **搜索数据源**：找剧搜索默认改用 `ContentRepository.searchAll`；`search()` 的 appSearch
+   在漫剧（COMIC）内容类型下实测无结果。
+3. **`FeedController` 回调扩展**：除设计中的 `onSeries/onStatus/onPlaying/onProgress` 外，
+   增加 `onTrial`（试播片段变化）、`onChange`（加载/失败/暂停标记变化）与 `onEnded`
+   （试播结束，电视首页据此打开操作栏）；并暴露只读状态 `clip/loading/isFailed/recovering/
+   active`。`TrialPlayback` 增加 `duration()`（默认 0），供触摸进度条使用。语义未变。
+4. **播放器自动隐藏**：`PlayerChrome` 增加可选 `modalOpen` 回调；任何弹层/对话框打开期间
+   不自动隐藏控件（实现"弹层打开期间 PlayerChrome 不自动隐藏"）。`MainActivity.hideHud`
+   在触摸模式下同样跳过。
+5. **触摸选集弹层**：打开选集弹层时不暂停播放（电视 `EpisodePanel` 会暂停），关闭后观看
+   不中断；选集网格用"当前/上次/已看"标记。
+6. **"我的"设置分组**：按现有 `settings()` 的四组（播放 / 显示 / 账户 / 更新与关于）实现，
+   未新增"同步与备份（导出/导入设置）"和独立"解码与伴机"分组；伴机代解码仍在播放器
+   "播放设置"弹层内配置（标准 `AlertDialog`，已可触摸）。版本与更新复用 `AppUpdater`。
+7. **电视文案微调**：试播结束与试播恢复失败提示去掉了"按 ↓ 换一部"的方向键文案，统一为
+   中性表述（触摸文案不得出现方向键；电视失去该提示）。
+8. **测试调整**：`HomeFeedScreenTest` 改为通过反射读取 `FeedController` 的私有簿记字段
+   （断言未改），并删除仅覆盖已删手机布局的 `phoneHomeFeedHidesRemoteHints`；
+   `TvSocialTest` 加 `television` qualifier 以继续验证电视焦点语义；此前若干电视测试类
+   加 `-television` qualifier（WindowClass 等触摸测试保持原 qualifier）。
+9. **`DeviceUi`**：按计划删除不再使用的 `phone()/tablet()`，保留 `television()/touchFirst()/
+   form()/catalogColumns()`；`enableRemoteFocus()` 辅助函数保留（电视触摸模式下可聚焦）。
+10. **未完成的设备验证**：模拟器 `emulator-5554` 在断网验证后 ADB 失联且重启无效，所有任务的
+   设备验证（含旋转保持位置、手势、平板居中卡片、字体 1.3 倍、320dp 窄屏）均**未执行**；
+    电视界面也没有电视设备/模拟器，仅由单元测试覆盖。`docs/superpowers/plans/
+    2026-11-11-touch-ui.md` 中相应 Step 4 已标注。
+11. **极窄窗口**：`WindowClass.Compact` 兜底一切宽度 `< 600dp`，320dp 仅由布局自适应
+    （弹层全宽、网格 3 列、标题 2 行），未做专门的 320dp 视觉验证。

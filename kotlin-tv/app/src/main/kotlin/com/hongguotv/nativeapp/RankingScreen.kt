@@ -65,14 +65,7 @@ internal class RankingScreen(
         val title = row().apply { setPadding(0, dp(8), 0, dp(8)) }
         heading.typeface = Typeface.DEFAULT_BOLD
         title.addView(heading, params(0).apply { weight = 1f })
-        title.addView(
-            label(
-                if (DeviceUi.television(activity)) "方向键选剧  ·  确定看详情  ·  长按更多"
-                else "点选打开详情  ·  长按更多",
-                12f,
-                TvStyle.muted,
-            )
-        )
+        title.addView(label("方向键选剧  ·  确定看详情  ·  长按更多", 12f, TvStyle.muted))
         addView(title)
         val bar = row()
         RankBoard.entries.forEach { board ->

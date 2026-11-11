@@ -458,56 +458,6 @@ class MainActivity : Activity() {
         return view
     }
 
-    private fun applyPhoneCatalogChrome(container: LinearLayout, top: LinearLayout, divider: View) {
-        if (!DeviceUi.phone(this)) return
-        top.visibility = View.GONE
-        divider.visibility = View.GONE
-        if (tab in 3..6) {
-            val me = row().apply { setPadding(dp(8), dp(10), dp(8), dp(6)) }
-            listOf(3 to "收藏", 4 to "历史", 5 to "预约", 6 to "设置").forEach { (index, label) ->
-                val item = addButton(me, label, index == tab) { switchTab(index) }
-                item.gravity = Gravity.CENTER
-                item.textSize = 14f
-                (item.layoutParams as LinearLayout.LayoutParams).apply {
-                    width = 0
-                    weight = 1f
-                    rightMargin = dp(6)
-                }
-            }
-            container.addView(me)
-        }
-        container.setPadding(
-            if (tab == 0) 0 else dp(12),
-            if (tab == 0) 0 else dp(8),
-            if (tab == 0) 0 else dp(12),
-            dp(56),
-        )
-        root.addView(phoneBottomBar(), FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
-    }
-
-    private fun phoneBottomBar(): LinearLayout {
-        val bar =
-            LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER
-                setBackgroundColor(Color.rgb(16, 21, 30))
-                setPadding(dp(6), dp(6), dp(6), dp(8))
-            }
-        listOf(
-            Triple("首页", tab == 0, 0),
-            Triple("找剧", tab == 1, 1),
-            Triple("排行榜", tab == 2, 2),
-            Triple("我的", tab in 3..6, 3),
-        ).forEach { (label, on, target) ->
-            val view = button(label, on) { if (tab != target) switchTab(target) }
-            view.gravity = Gravity.CENTER
-            view.textSize = 13f
-            view.minHeight = dp(44)
-            bar.addView(view, LinearLayout.LayoutParams(0, dp(48), 1f).apply { marginEnd = dp(4) })
-        }
-        return bar
-    }
-
     // 启动入口：创建根容器，初始化账户、更新和媒体控制，再异步读取本机记录。
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
@@ -659,14 +609,9 @@ class MainActivity : Activity() {
         root.removeAllViews()
         root.background = TvVisual.backdrop(this)
         val container = column()
-        val television = DeviceUi.television(this)
-        val phone = DeviceUi.phone(this)
-        val horizontal = if (television) dp(widthDp() * .05f) else if (phone) 0 else dp(12)
-        val vertical =
-            if (television) (resources.displayMetrics.heightPixels * .05f).toInt()
-            else if (phone) 0 else dp(8)
+        val horizontal = dp(widthDp() * .05f)
+        val vertical = (resources.displayMetrics.heightPixels * .05f).toInt()
         container.setPadding(horizontal, vertical, horizontal, vertical)
-        container.fitsSystemWindows = !television
         root.addView(container, FrameLayout.LayoutParams(-1, -1))
         if (title != null) {
             val heading = row()
@@ -1040,7 +985,6 @@ class MainActivity : Activity() {
         val divider =
             View(this).apply { setBackgroundColor(TvStyle.outline) }
         container.addView(divider, lp(-1, dp(1)).apply { bottomMargin = dp(6) })
-        applyPhoneCatalogChrome(container, top, divider)
         if (tab == 6) {
             val body = column()
             container.addView(body, lp(-1, 0).apply { weight = 1f })
@@ -3151,7 +3095,6 @@ class MainActivity : Activity() {
                 fullscreenController = FullscreenController(this).also { it.enterImmersive() }
                 social.attach(root)
             } else {
-            attachPlayerGestures(view)
             persistentTime = text("", 12f, white)
             persistentBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progressTintList = android.content.res.ColorStateList.valueOf(accent) }
             persistentProgress = column().apply {
@@ -3207,30 +3150,10 @@ class MainActivity : Activity() {
                     progressTintList = android.content.res.ColorStateList.valueOf(accent)
                     progressBackgroundTintList = android.content.res.ColorStateList.valueOf(surface)
                 }
-            hud.addView(progressBar, lp(-1, dp(if (DeviceUi.touchFirst(this)) 18 else 4)))
-            progressBar.setOnTouchListener { bar, event ->
-                if (!DeviceUi.touchFirst(this) || !playbackReady) return@setOnTouchListener false
-                val p = player ?: return@setOnTouchListener false
-                val duration = p.duration
-                if (duration <= 0 || bar.width <= 0) return@setOnTouchListener false
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN,
-                    MotionEvent.ACTION_MOVE,
-                    MotionEvent.ACTION_UP -> {
-                        seekTo((duration * (event.x / bar.width).coerceIn(0f, 1f)).toLong())
-                        true
-                    }
-                    else -> false
-                }
-            }
+            hud.addView(progressBar, lp(-1, dp(4)))
             hud.addView(
-                text(
-                    if (DeviceUi.television(this))
-                        "确认 暂停/播放    左右 快退/快进    ↓ 选集    ↑ 操作菜单    菜单 更多"
-                    else "点画面暂停  ·  上滑下一集  ·  拖动进度条",
-                    13f,
-                    muted,
-                ).apply { setPadding(0, dp(12), 0, 0) },
+                text("确认 暂停/播放    左右 快退/快进    ↓ 选集    ↑ 操作菜单    菜单 更多", 13f, muted)
+                    .apply { setPadding(0, dp(12), 0, 0) },
             )
             controls =
                 column().apply {
@@ -4380,14 +4303,6 @@ class MainActivity : Activity() {
             (library.clockMode == 2 || hud.visibility == View.VISIBLE)) View.VISIBLE else View.GONE
     }
 
-    private fun onPlayerSurfaceClick() {
-        if (screen != "player" || playError || DeviceUi.television(this)) return
-        if (hud.visibility != View.VISIBLE) {
-            showHud()
-            if (!panel) openPlaybackChrome()
-        } else togglePlayback()
-    }
-
     private fun showHud() {
         if (screen != "player") return
         hideAutoplayOverlay = false
@@ -4699,55 +4614,6 @@ class MainActivity : Activity() {
         main.postDelayed(seekRunnable, 250)
         updatePlaybackText()
         showHud()
-    }
-
-    private fun attachPlayerGestures(view: PlayerView) {
-        if (DeviceUi.television(this)) {
-            view.setOnClickListener { onPlayerSurfaceClick() }
-            return
-        }
-        val detector =
-            GestureDetector(
-                this,
-                object : GestureDetector.SimpleOnGestureListener() {
-                    override fun onDown(e: MotionEvent) = true
-
-                    override fun onSingleTapUp(e: MotionEvent): Boolean {
-                        onPlayerSurfaceClick()
-                        return true
-                    }
-
-                    override fun onFling(
-                        e1: MotionEvent?,
-                        e2: MotionEvent,
-                        velocityX: Float,
-                        velocityY: Float,
-                    ): Boolean {
-                        val delta = PlaybackInput.verticalFlingDelta(velocityY)
-                        if (delta == 0) return false
-                        skipEpisode(delta)
-                        return true
-                    }
-                },
-            )
-        view.setOnTouchListener { _, event -> detector.onTouchEvent(event) }
-    }
-
-    private fun showTouchTransport() {
-        if (playError) return
-        panel = true
-        showHud()
-        controls.visibility = View.VISIBLE
-        controls.removeAllViews()
-        val transport = row()
-        controls.addView(transport)
-        transportPlay =
-            addButton(transport, if (player?.playWhenReady == true) "暂停" else "播放") { togglePlayback() }
-        addButton(transport, "上一集") { skipEpisode(-1) }
-        addButton(transport, "下一集") { skipEpisode(1) }
-        lateinit var episodes: TextView
-        episodes = addButton(transport, "选集") { showEpisodePanel(episodes) }
-        addButton(transport, "倍速") { showSpeedPicker(transportPlay ?: episodes) }
     }
 
     private fun openPlaybackChrome() {

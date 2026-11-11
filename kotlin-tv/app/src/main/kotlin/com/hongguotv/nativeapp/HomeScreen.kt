@@ -259,14 +259,7 @@ class HomeScreen(
                     label(shelf.title, 16f).apply { setTypeface(null, Typeface.BOLD) },
                     LayoutParams(0, -2, 1f),
                 )
-                heading.addView(
-                    label(
-                        if (DeviceUi.television(context)) "左右选剧  ·  上下切换分区"
-                        else "点选打开  ·  长按更多",
-                        10f,
-                        TvStyle.muted,
-                    )
-                )
+                heading.addView(label("左右选剧  ·  上下切换分区", 10f, TvStyle.muted))
                 block.addView(heading)
                 val horizontal =
                     HorizontalScrollView(context).apply {

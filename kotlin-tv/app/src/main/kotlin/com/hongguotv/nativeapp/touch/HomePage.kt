@@ -212,12 +212,16 @@ internal class HomePage(
                 ): Boolean {
                     val delta = PlaybackInput.verticalFlingDelta(velocityY)
                     if (delta == 0) return false
+                    flung = true
                     if (delta < 0) controller.previous() else controller.next()
                     animateSnap(delta)
                     return true
                 }
             },
         )
+
+    private var downY = 0f
+    private var flung = false
 
     init {
         root.setBackgroundColor(TouchTheme.background)
@@ -228,7 +232,20 @@ internal class HomePage(
         controller.attachStage(stage)
         stage.isClickable = true
         stage.contentDescription = "推荐视频"
-        stage.setOnTouchListener { _, event -> gestures.onTouchEvent(event) }
+        stage.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downY = event.y
+                    flung = false
+                }
+                MotionEvent.ACTION_UP -> {
+                    // 第一页慢速下拉换一批；快速下滑仍由 onFling 切到上一部。
+                    if (!flung && state.index == 0 && event.y - downY > TouchTheme.dp(context, 96))
+                        controller.refresh()
+                }
+            }
+            gestures.onTouchEvent(event)
+        }
         root.addView(
             chips,
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {

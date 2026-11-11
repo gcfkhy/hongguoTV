@@ -30,7 +30,7 @@ internal class TvSearchPanel(
             setHintTextColor(TvStyle.muted)
             isSingleLine = true
             filters = arrayOf(InputFilter.LengthFilter(80))
-            showSoftInputOnFocus = DeviceUi.touchFirst(context)
+            showSoftInputOnFocus = false
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
             setText(initial)
             setSelection(text.length)
@@ -71,7 +71,7 @@ internal class TvSearchPanel(
         }
 
     private fun hideKeyboard() {
-        if (DeviceUi.television(context)) input.showSoftInputOnFocus = false
+        input.showSoftInputOnFocus = false
         (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(input.windowToken, 0)
     }
@@ -118,32 +118,29 @@ internal class TvSearchPanel(
             leftScroll,
             LayoutParams(dp(if (compact) 190 else 230), -1).apply { rightMargin = dp(14) },
         )
-        val remote = DeviceUi.television(context)
-        left.addView(label(if (remote) "遥控器搜索" else "搜索", 18f))
+        left.addView(label("遥控器搜索", 18f))
         left.addView(input, LayoutParams(-1, dp(42)))
-        if (remote) {
-            val keyboard =
-                LinearLayout(context).apply {
-                    orientation = VERTICAL
-                    setPadding(0, dp(8), 0, 0)
-                }
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".chunked(6).forEach { row ->
-                val line = LinearLayout(context)
-                row.forEach { char ->
-                    val key = action(char.toString()) { insert(char.lowercaseChar().toString()) }
-                    keys += key
-                    line.addView(
-                        key,
-                        LayoutParams(0, dp(34), 1f).apply {
-                            rightMargin = dp(3)
-                            bottomMargin = dp(3)
-                        },
-                    )
-                }
-                keyboard.addView(line)
+        val keyboard =
+            LinearLayout(context).apply {
+                orientation = VERTICAL
+                setPadding(0, dp(8), 0, 0)
             }
-            left.addView(keyboard)
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".chunked(6).forEach { row ->
+            val line = LinearLayout(context)
+            row.forEach { char ->
+                val key = action(char.toString()) { insert(char.lowercaseChar().toString()) }
+                keys += key
+                line.addView(
+                    key,
+                    LayoutParams(0, dp(34), 1f).apply {
+                        rightMargin = dp(3)
+                        bottomMargin = dp(3)
+                    },
+                )
+            }
+            keyboard.addView(line)
         }
+        left.addView(keyboard)
         searchButton = action("搜索") { submit() }
         actions +=
             listOf(
@@ -175,13 +172,7 @@ internal class TvSearchPanel(
             }
             left.addView(line)
         }
-        left.addView(
-            label(
-                if (remote) "方向键选字 · 确定输入\n拼音联想取决于服务端"
-                else "点输入框用键盘搜索 · 拼音联想取决于服务端",
-                11f,
-            )
-        )
+        left.addView(label("方向键选字 · 确定输入\n拼音联想取决于服务端", 11f))
         val words = LinearLayout(context).apply { orientation = VERTICAL }
         val wordsScroll =
             ScrollView(context).apply {

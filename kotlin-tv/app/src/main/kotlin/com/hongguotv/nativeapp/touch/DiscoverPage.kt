@@ -397,8 +397,9 @@ internal class DiscoverPage(
         applyMode()
         renderSearchState()
         input.requestFocus()
-        val manager = context.getSystemService(InputMethodManager::class.java)
-        manager?.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+        val manager =
+            context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        manager.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
     }
 
     private fun leaveSearch() {
@@ -543,7 +544,8 @@ internal class DiscoverPage(
     }
 
     private fun hideKeyboard() {
-        val manager = context.getSystemService(InputMethodManager::class.java) ?: return
+        val manager =
+            context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as InputMethodManager
         manager.hideSoftInputFromWindow(input.windowToken, 0)
     }
 }
