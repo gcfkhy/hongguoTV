@@ -328,6 +328,8 @@ internal interface TrialPlayback {
 
     fun position(): Long
 
+    fun duration(): Long = 0
+
     fun clear()
 
     fun release()
@@ -543,6 +545,8 @@ internal class Media3TrialPlayback(context: Context) : TrialPlayback {
     }
 
     override fun position() = player.currentPosition.coerceAtLeast(0)
+
+    override fun duration() = player.duration.coerceAtLeast(0)
 
     override fun clear() {
         activeId = null

@@ -127,8 +127,17 @@ class HomeFeedScreenTest {
         }
     }
 
-    private fun get(target: Any, name: String) =
-        target.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(target)
+    private fun get(target: Any, name: String): Any? {
+        val own =
+            runCatching {
+                target.javaClass.getDeclaredField(name).apply { isAccessible = true }
+            }.getOrNull()
+        if (own != null) return own.get(target)
+        // Feed bookkeeping moved into FeedController; keep the assertions unchanged.
+        val controller =
+            target.javaClass.getDeclaredField("controller").apply { isAccessible = true }.get(target)!!
+        return controller.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(controller)
+    }
 
     private fun pump(screen: HomeFeedScreen) {
         repeat(4) {
