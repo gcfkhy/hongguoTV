@@ -42,8 +42,7 @@ class EpisodePanel(
             id = View.generateViewId()
             gravity = Gravity.CENTER
             minHeight = dp(46)
-            isFocusable = true
-            isFocusableInTouchMode = true
+            enableRemoteFocus()
             fun paint(focus: Boolean) {
                 background = TvStyle.card(activity, focus, active)
             }

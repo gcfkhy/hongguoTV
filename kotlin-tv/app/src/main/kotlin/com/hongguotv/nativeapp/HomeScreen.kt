@@ -143,8 +143,7 @@ class HomeScreen(
         label("正在更新热门…", 13f).apply {
             id = View.generateViewId()
             tag = "home:refresh"
-            isFocusable = true
-            isFocusableInTouchMode = true
+            enableRemoteFocus()
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(8), dp(12), dp(8))
             background = shape(false)
@@ -260,7 +259,14 @@ class HomeScreen(
                     label(shelf.title, 16f).apply { setTypeface(null, Typeface.BOLD) },
                     LayoutParams(0, -2, 1f),
                 )
-                heading.addView(label("左右选剧  ·  上下切换分区", 10f, TvStyle.muted))
+                heading.addView(
+                    label(
+                        if (DeviceUi.television(context)) "左右选剧  ·  上下切换分区"
+                        else "点选打开  ·  长按更多",
+                        10f,
+                        TvStyle.muted,
+                    )
+                )
                 block.addView(heading)
                 val horizontal =
                     HorizontalScrollView(context).apply {
@@ -277,8 +283,9 @@ class HomeScreen(
                 block.addView(horizontal)
                 val rowCards = mutableListOf<Card>()
                 fun addCard(entry: Entry?, moreAction: (() -> Unit)? = null) {
+                    val columns = DeviceUi.catalogColumns(context)
                     val width =
-                        ((resources.displayMetrics.widthPixels * .9f - dp(70)) / 6)
+                        ((resources.displayMetrics.widthPixels * .9f - dp(70)) / columns)
                             .toInt()
                             .coerceAtLeast(dp(100))
                     val key =
@@ -289,8 +296,7 @@ class HomeScreen(
                             orientation = VERTICAL
                             id = View.generateViewId()
                             tag = key
-                            isFocusable = true
-                            isFocusableInTouchMode = true
+                            enableRemoteFocus()
                             setPadding(dp(4), dp(4), dp(4), dp(8))
                             background = shape(false)
                         }
@@ -394,8 +400,7 @@ class HomeScreen(
                 label("更多热门  ›", 15f).apply {
                     id = View.generateViewId()
                     tag = "home:more"
-                    isFocusable = true
-                    isFocusableInTouchMode = true
+                    enableRemoteFocus()
                     setPadding(dp(12), dp(12), dp(12), dp(12))
                     background = shape(false)
                     setOnFocusChangeListener { _, f ->

@@ -30,7 +30,7 @@ internal class TvSearchPanel(
             setHintTextColor(TvStyle.muted)
             isSingleLine = true
             filters = arrayOf(InputFilter.LengthFilter(80))
-            showSoftInputOnFocus = false
+            showSoftInputOnFocus = DeviceUi.touchFirst(context)
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
             setText(initial)
             setSelection(text.length)
@@ -60,7 +60,7 @@ internal class TvSearchPanel(
             text = value
             textSize = 13f
             gravity = Gravity.CENTER
-            isFocusable = true
+            enableRemoteFocus()
             isClickable = true
             minHeight = dp(36)
             setTextColor(TvStyle.text)
@@ -71,7 +71,7 @@ internal class TvSearchPanel(
         }
 
     private fun hideKeyboard() {
-        input.showSoftInputOnFocus = false
+        if (DeviceUi.television(context)) input.showSoftInputOnFocus = false
         (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(input.windowToken, 0)
     }
@@ -118,29 +118,32 @@ internal class TvSearchPanel(
             leftScroll,
             LayoutParams(dp(if (compact) 190 else 230), -1).apply { rightMargin = dp(14) },
         )
-        left.addView(label("遥控器搜索", 18f))
+        val remote = DeviceUi.television(context)
+        left.addView(label(if (remote) "遥控器搜索" else "搜索", 18f))
         left.addView(input, LayoutParams(-1, dp(42)))
-        val keyboard =
-            LinearLayout(context).apply {
-                orientation = VERTICAL
-                setPadding(0, dp(8), 0, 0)
+        if (remote) {
+            val keyboard =
+                LinearLayout(context).apply {
+                    orientation = VERTICAL
+                    setPadding(0, dp(8), 0, 0)
+                }
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".chunked(6).forEach { row ->
+                val line = LinearLayout(context)
+                row.forEach { char ->
+                    val key = action(char.toString()) { insert(char.lowercaseChar().toString()) }
+                    keys += key
+                    line.addView(
+                        key,
+                        LayoutParams(0, dp(34), 1f).apply {
+                            rightMargin = dp(3)
+                            bottomMargin = dp(3)
+                        },
+                    )
+                }
+                keyboard.addView(line)
             }
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".chunked(6).forEach { row ->
-            val line = LinearLayout(context)
-            row.forEach { char ->
-                val key = action(char.toString()) { insert(char.lowercaseChar().toString()) }
-                keys += key
-                line.addView(
-                    key,
-                    LayoutParams(0, dp(34), 1f).apply {
-                        rightMargin = dp(3)
-                        bottomMargin = dp(3)
-                    },
-                )
-            }
-            keyboard.addView(line)
+            left.addView(keyboard)
         }
-        left.addView(keyboard)
         searchButton = action("搜索") { submit() }
         actions +=
             listOf(
@@ -172,7 +175,13 @@ internal class TvSearchPanel(
             }
             left.addView(line)
         }
-        left.addView(label("方向键选字 · 确定输入\n拼音联想取决于服务端", 11f))
+        left.addView(
+            label(
+                if (remote) "方向键选字 · 确定输入\n拼音联想取决于服务端"
+                else "点输入框用键盘搜索 · 拼音联想取决于服务端",
+                11f,
+            )
+        )
         val words = LinearLayout(context).apply { orientation = VERTICAL }
         val wordsScroll =
             ScrollView(context).apply {
@@ -214,7 +223,7 @@ internal class TvSearchPanel(
         resultColumn.addView(results, LayoutParams(-1, 0, 1f))
         addView(resultColumn, LayoutParams(0, -1, 1f))
         input.nextFocusUpId = upper.id
-        input.nextFocusDownId = keys.first().id
+        input.nextFocusDownId = keys.firstOrNull()?.id ?: actions.first().id
         input.setOnEditorActionListener { _, _, _ ->
             submit()
             true
@@ -225,7 +234,7 @@ internal class TvSearchPanel(
 
     fun middleEntry(): View? = suggestions.entry() ?: recents.firstOrNull()
 
-    fun entry(): View = keys.first()
+    fun entry(): View = keys.firstOrNull() ?: input
 
     fun updateNavigation() {
         val right = middleEntry()?.id ?: resultEntry()?.id ?: input.id
@@ -238,17 +247,18 @@ internal class TvSearchPanel(
         actions.forEachIndexed { i, view ->
             view.nextFocusLeftId = actions.getOrNull(i - 1)?.takeIf { i % 3 != 0 }?.id ?: view.id
             view.nextFocusRightId = if (i % 3 == 2) right else actions.getOrNull(i + 1)?.id ?: right
-            view.nextFocusUpId = actions.getOrNull(i - 3)?.id ?: keys[30 + i % 3].id
+            view.nextFocusUpId =
+                actions.getOrNull(i - 3)?.id ?: keys.getOrNull(30 + i % 3)?.id ?: input.id
             view.nextFocusDownId = actions.getOrNull(i + 3)?.id ?: view.id
         }
         recents.forEachIndexed { i, view ->
             view.nextFocusUpId = recents.getOrNull(i - 1)?.id ?: suggestions.entry()?.id ?: input.id
             view.nextFocusDownId = recents.getOrNull(i + 1)?.id ?: view.id
-            view.nextFocusLeftId = keys[5].id
+            view.nextFocusLeftId = keys.getOrNull(5)?.id ?: input.id
             view.nextFocusRightId = resultEntry()?.id ?: input.id
         }
         input.nextFocusRightId = right
         input.nextFocusUpId = upper.id
-        input.nextFocusDownId = keys.first().id
+        input.nextFocusDownId = keys.firstOrNull()?.id ?: actions.first().id
     }
 }

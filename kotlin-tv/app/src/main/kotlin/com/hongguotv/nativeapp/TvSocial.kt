@@ -155,8 +155,7 @@ class TvSocial(
 
     private fun button(text: String, action: () -> Unit) =
         label(text).apply {
-            isFocusable = true
-            isFocusableInTouchMode = true
+            enableRemoteFocus()
             minHeight = dp(48)
             background = TvStyle.card(activity, false)
             setOnFocusChangeListener { _, focus -> background = TvStyle.card(activity, focus) }
@@ -324,8 +323,7 @@ class TvSocial(
             val card =
                 LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
-                    isFocusable = true
-                    isFocusableInTouchMode = true
+                    enableRemoteFocus()
                     setPadding(dp(12), dp(10), dp(12), dp(12))
                     background = TvStyle.card(activity, false)
                     contentDescription = "$author，$content"

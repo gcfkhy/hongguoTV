@@ -17,11 +17,11 @@ import org.robolectric.annotation.LooperMode
 import org.robolectric.shadows.ShadowLooper
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [26], qualifiers = "w960dp-h540dp-land-mdpi")
+@Config(sdk = [26], qualifiers = "w960dp-h540dp-land-television-mdpi")
 @LooperMode(LooperMode.Mode.PAUSED)
 class TvSearchPanelTest {
     @Test
-    @Config(qualifiers = "w640dp-h360dp-land-mdpi")
+    @Config(qualifiers = "w640dp-h360dp-land-television-mdpi")
     fun compactLayoutKeepsResultsWideAndScrollsTheKeyboardInsteadOfHidingControls() {
         val controller = Robolectric.buildActivity(Activity::class.java).setup()
         val activity = controller.get()

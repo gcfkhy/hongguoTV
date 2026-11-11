@@ -23,6 +23,7 @@ android {
         targetSdk = 36
         versionCode = System.getenv("HONGGUOTV_VERSION_CODE")?.toInt() ?: 13
         versionName = System.getenv("HONGGUOTV_VERSION_NAME") ?: "0.11.1"
+        manifestPlaceholders["appLabel"] = "红果 TV 原生版"
     }
     buildFeatures { buildConfig = true }
     testOptions {
@@ -43,6 +44,11 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+            manifestPlaceholders["appLabel"] = "红果 TV 预览"
+        }
         getByName("release") {
             signingConfig = signingConfigs.getByName("delivery")
             isMinifyEnabled = true

@@ -136,8 +136,7 @@ class TvTools(private val activity: Activity) {
                 id = View.generateViewId()
                 tag = "choice-${choices.size}"
                 gravity = Gravity.CENTER_VERTICAL
-                isFocusable = true
-                isFocusableInTouchMode = true
+                enableRemoteFocus()
                 isClickable = true
                 minimumHeight = dp(48)
                 setPadding(dp(14), dp(10), dp(14), dp(10))

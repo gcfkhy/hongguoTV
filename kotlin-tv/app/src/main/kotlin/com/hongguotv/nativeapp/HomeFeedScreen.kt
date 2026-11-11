@@ -93,8 +93,7 @@ internal class HomeFeedScreen(
     private fun button(value: String, action: () -> Unit) =
         label(value, 14f).apply {
             id = View.generateViewId()
-            isFocusable = true
-            isFocusableInTouchMode = true
+            enableRemoteFocus()
             isClickable = true
             gravity = Gravity.CENTER
             minHeight = dp(44)
@@ -152,8 +151,7 @@ internal class HomeFeedScreen(
         }
         addView(types, lp(-1, dp(48)))
         val content = LinearLayout(activity)
-        stage.isFocusable = true
-        stage.isFocusableInTouchMode = true
+        stage.enableRemoteFocus()
         stage.isClickable = true
         stage.setPadding(dp(3), dp(3), dp(3), dp(3))
         stage.background = TvStyle.shape(activity, Color.BLACK)

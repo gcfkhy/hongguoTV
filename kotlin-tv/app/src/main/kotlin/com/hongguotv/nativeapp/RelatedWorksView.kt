@@ -50,8 +50,7 @@ internal class RelatedWorksView(
         val refresh =
             label("刷新", 15f).apply {
                 id = View.generateViewId()
-                isFocusable = true
-                isFocusableInTouchMode = true
+                enableRemoteFocus()
                 setPadding(dp(14), dp(10), dp(14), dp(10))
                 background = TvStyle.card(context, false)
                 setOnFocusChangeListener { view, focused ->
@@ -86,7 +85,7 @@ internal class RelatedWorksView(
         if (rows.isEmpty()) return
         val allButton = label("全部季 / 相关作品 · ${rows.size} 项 ›").apply {
             id = View.generateViewId()
-            isFocusable = true
+            enableRemoteFocus()
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = TvStyle.card(context, false)
             setOnFocusChangeListener { v, focused -> v.background = TvStyle.card(context, focused) }
@@ -108,8 +107,7 @@ internal class RelatedWorksView(
                         orientation = VERTICAL
                         id = View.generateViewId()
                         tag = work.series.id
-                        isFocusable = true
-                        isFocusableInTouchMode = true
+                        enableRemoteFocus()
                         contentDescription = work.series.title + "，" + work.label
                         setPadding(dp(5), dp(5), dp(5), dp(9))
                         background = TvStyle.card(context, false)
@@ -169,7 +167,7 @@ internal class RelatedWorksView(
         val cells = rows.map { work ->
             label(work.series.title + "\n" + work.label, 13f).apply {
                 id = View.generateViewId()
-                isFocusable = true
+                enableRemoteFocus()
                 maxLines = 3
                 ellipsize = android.text.TextUtils.TruncateAt.END
                 gravity = Gravity.CENTER_VERTICAL

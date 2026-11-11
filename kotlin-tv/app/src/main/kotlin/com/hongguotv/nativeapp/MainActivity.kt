@@ -6,6 +6,7 @@ package com.hongguotv.nativeapp
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -329,6 +330,7 @@ class MainActivity : Activity() {
     private var autoDowngrades = 0
     private val stallGuard = PlaybackStallGuard()
     private var lastPlaybackDiagnosticAt = 0L
+    private var lastWheelSkipAt = 0L
     private val tick =
         object : Runnable {
             override fun run() {
@@ -412,8 +414,7 @@ class MainActivity : Activity() {
     private fun focusStyle(view: View, selected: Boolean = false) {
         view.id = View.generateViewId()
         view.isSelected = selected
-        view.isFocusable = true
-        view.isFocusableInTouchMode = true
+        view.enableRemoteFocus()
         fun paint(focused: Boolean) {
             view.background = TvStyle.card(this, focused, selected)
         }
@@ -455,15 +456,27 @@ class MainActivity : Activity() {
         ContentRepository.deviceStore = PreferencesPlayerDeviceStore(
             getSharedPreferences("native-player-device", MODE_PRIVATE)
         )
-        window.decorView.systemUiVisibility =
-            View.SYSTEM_UI_FLAG_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        if (DeviceUi.television(this)) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            window.decorView.systemUiVisibility =
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        } else {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_USER
+            if (Build.VERSION.SDK_INT >= 21) {
+                window.statusBarColor = bg
+                window.navigationBarColor = bg
+            }
+        }
         librarySources = LibrarySources(this)
         library = Library(this)
         artwork = ArtworkLoader(this)
         tvTools = TvTools(this)
-        root = FrameLayout(this).apply { background = TvVisual.backdrop(this@MainActivity) }
+        root = FrameLayout(this).apply {
+            background = TvVisual.backdrop(this@MainActivity)
+            fitsSystemWindows = DeviceUi.touchFirst(this@MainActivity)
+        }
         setContentView(root)
         CodecCapabilities.init(this)
         CodecCapabilities.logDeviceCapabilities()
@@ -591,9 +604,12 @@ class MainActivity : Activity() {
         root.removeAllViews()
         root.background = TvVisual.backdrop(this)
         val container = column()
-        val horizontal = dp(widthDp() * .05f)
-        val vertical = (resources.displayMetrics.heightPixels * .05f).toInt()
+        val television = DeviceUi.television(this)
+        val horizontal = if (television) dp(widthDp() * .05f) else dp(12)
+        val vertical =
+            if (television) (resources.displayMetrics.heightPixels * .05f).toInt() else dp(8)
         container.setPadding(horizontal, vertical, horizontal, vertical)
+        container.fitsSystemWindows = !television
         root.addView(container, FrameLayout.LayoutParams(-1, -1))
         if (title != null) {
             val heading = row()
@@ -1525,7 +1541,7 @@ class MainActivity : Activity() {
             return
         }
         val cards = mutableListOf<View>()
-        val count = 6
+        val count = DeviceUi.catalogColumns(this)
         val gap = dp(14)
         val width =
             ((resources.displayMetrics.widthPixels * .9f - gap * (count - 1)) / count).toInt()
@@ -1859,7 +1875,7 @@ class MainActivity : Activity() {
                 this,
                 if (tvSearchPanel != null) {
                     if (widthDp() < 800) 2 else if (widthDp() < 1200) 3 else 4
-                } else 6,
+                } else DeviceUi.catalogColumns(this),
                 upper,
                 { item, recycled ->
                     val card = recycled as? CatalogPosterCard ?: CatalogPosterCard(this)
@@ -2995,9 +3011,11 @@ class MainActivity : Activity() {
                     useController = false
                     resizeMode = frameResizeMode()
                     isFocusable = false
+                    isClickable = true
                     setKeepContentOnPlayerReset(true)
                     setShutterBackgroundColor(Color.BLACK)
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                    setOnClickListener { onPlayerSurfaceClick() }
                 }
             playerView = view
             root.addView(view, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
@@ -3058,11 +3076,30 @@ class MainActivity : Activity() {
                     progressTintList = android.content.res.ColorStateList.valueOf(accent)
                     progressBackgroundTintList = android.content.res.ColorStateList.valueOf(surface)
                 }
-            hud.addView(progressBar, lp(-1, dp(4)))
-            hud.addView(
-                text("确认 暂停/播放    左右 快退/快进    ↓ 选集    ↑ 操作菜单    菜单 更多", 13f, muted).apply {
-                    setPadding(0, dp(12), 0, 0)
+            hud.addView(progressBar, lp(-1, dp(if (DeviceUi.touchFirst(this)) 18 else 4)))
+            progressBar.setOnTouchListener { bar, event ->
+                if (!DeviceUi.touchFirst(this) || !playbackReady) return@setOnTouchListener false
+                val p = player ?: return@setOnTouchListener false
+                val duration = p.duration
+                if (duration <= 0 || bar.width <= 0) return@setOnTouchListener false
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN,
+                    MotionEvent.ACTION_MOVE,
+                    MotionEvent.ACTION_UP -> {
+                        seekTo((duration * (event.x / bar.width).coerceIn(0f, 1f)).toLong())
+                        true
+                    }
+                    else -> false
                 }
+            }
+            hud.addView(
+                text(
+                    if (DeviceUi.television(this))
+                        "确认 暂停/播放    左右 快退/快进    ↓ 选集    ↑ 操作菜单    菜单 更多"
+                    else "点画面 暂停/播放    空格暂停    左右快进退    上下或滚轮换集",
+                    13f,
+                    muted,
+                ).apply { setPadding(0, dp(12), 0, 0) },
             )
             controls =
                 column().apply {
@@ -3091,7 +3128,7 @@ class MainActivity : Activity() {
         if (recoveryDisplayActive) {
             addButton(controls, "取消恢复") { stopPreparingPlayback() }
             addButton(controls, "返回选集") { returnToDetail(true) }
-        }
+        } else if (DeviceUi.touchFirst(this) && hud.visibility == View.VISIBLE) showPanel()
         transportPlay = null
         sleepButton = null
         syncMediaSession()
@@ -4205,12 +4242,21 @@ class MainActivity : Activity() {
             (library.clockMode == 2 || hud.visibility == View.VISIBLE)) View.VISIBLE else View.GONE
     }
 
+    private fun onPlayerSurfaceClick() {
+        if (screen != "player" || playError || DeviceUi.television(this)) return
+        if (hud.visibility != View.VISIBLE) {
+            showHud()
+            if (!panel) showPanel()
+        } else togglePlayback()
+    }
+
     private fun showHud() {
         if (screen != "player") return
         hideAutoplayOverlay = false
         hud.visibility = View.VISIBLE
         updateClock()
         updatePlaybackText()
+        if (DeviceUi.touchFirst(this) && !playError && !recoveryDisplayActive && !panel) showPanel()
         main.removeCallbacks(hideHud)
         if (player?.isPlaying == true) main.postDelayed(hideHud, if (panel) 8000 else 4500)
     }
@@ -4823,6 +4869,10 @@ class MainActivity : Activity() {
     @Deprecated("TV remote back is handled through the activity")
     override fun onBackPressed() = goBack()
 
+    private fun playerChromeOpen() =
+        episodePanel != null || tvTools.showing || relayDialog?.isShowing == true ||
+            cloudAccount.showing
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (screen == "player") {
             if (panel && !playError && event.action == KeyEvent.ACTION_DOWN) showHud()
@@ -4857,36 +4907,59 @@ class MainActivity : Activity() {
                     }
                 return true
             }
-            if (!panel) {
+            if (!playerChromeOpen()) {
+                val television = DeviceUi.television(this)
+                val overlayTakesDpad = television && panel
                 if (
-                    key in
-                        listOf(
-                            KeyEvent.KEYCODE_DPAD_LEFT,
-                            KeyEvent.KEYCODE_DPAD_RIGHT,
-                            KeyEvent.KEYCODE_DPAD_CENTER,
-                            KeyEvent.KEYCODE_ENTER,
-                            KeyEvent.KEYCODE_DPAD_UP,
-                            KeyEvent.KEYCODE_DPAD_DOWN,
-                            KeyEvent.KEYCODE_MENU,
-                        )
+                    key == KeyEvent.KEYCODE_SPACE ||
+                        key == KeyEvent.KEYCODE_NUMPAD_ENTER
                 ) {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0)
+                        togglePlayback()
+                    return true
+                }
+                val command = PlaybackInput.command(key, television)
+                if (command != null && !overlayTakesDpad) {
                     if (event.action == KeyEvent.ACTION_DOWN)
-                        when (key) {
-                            KeyEvent.KEYCODE_DPAD_LEFT -> seek(-1, event.repeatCount)
-                            KeyEvent.KEYCODE_DPAD_RIGHT -> seek(1, event.repeatCount)
-                            KeyEvent.KEYCODE_DPAD_CENTER,
-                            KeyEvent.KEYCODE_ENTER -> if (event.repeatCount == 0) togglePlayback()
-                            KeyEvent.KEYCODE_DPAD_DOWN ->
+                        when (command) {
+                            PlaybackInput.Command.SeekBack -> seek(-1, event.repeatCount)
+                            PlaybackInput.Command.SeekForward -> seek(1, event.repeatCount)
+                            PlaybackInput.Command.Toggle ->
+                                if (event.repeatCount == 0) togglePlayback()
+                            PlaybackInput.Command.ShowEpisodes ->
                                 if (event.repeatCount == 0) showEpisodePanel(hud)
-                            KeyEvent.KEYCODE_DPAD_UP,
-                            KeyEvent.KEYCODE_MENU -> if (event.repeatCount == 0) showPanel()
-                            else -> showHud()
+                            PlaybackInput.Command.ShowPanel ->
+                                if (event.repeatCount == 0) showPanel()
+                            PlaybackInput.Command.PreviousEpisode ->
+                                if (event.repeatCount == 0) skipEpisode(-1)
+                            PlaybackInput.Command.NextEpisode ->
+                                if (event.repeatCount == 0) skipEpisode(1)
                         }
                     return true
                 }
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (
+            screen == "player" &&
+                DeviceUi.touchFirst(this) &&
+                !playerChromeOpen() &&
+                event.actionMasked == MotionEvent.ACTION_SCROLL
+        ) {
+            val delta = PlaybackInput.wheelEpisodeDelta(event.getAxisValue(MotionEvent.AXIS_VSCROLL))
+            if (delta != 0) {
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (now - lastWheelSkipAt >= 280) {
+                    lastWheelSkipAt = now
+                    skipEpisode(delta)
+                }
+                return true
+            }
+        }
+        return super.dispatchGenericMotionEvent(event)
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {

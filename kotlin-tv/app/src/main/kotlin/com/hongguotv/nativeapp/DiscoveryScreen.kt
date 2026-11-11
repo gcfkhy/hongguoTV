@@ -52,6 +52,7 @@ internal class DiscoveryScreen(
     private var browseStep = state.browseStep
     private var restoring = true
     private var serial = 0
+    private val columns = DeviceUi.catalogColumns(context)
     var navigationChanged: (() -> Unit)? = null
 
     private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
@@ -70,7 +71,7 @@ internal class DiscoveryScreen(
         browser =
             ContinuousCatalogView(
                 context,
-                6,
+                columns,
                 toggle,
                 { item, recycled ->
                     (recycled as? CatalogPosterCard ?: CatalogPosterCard(context)).apply {
@@ -88,7 +89,7 @@ internal class DiscoveryScreen(
                 val header = getChildAt(0).height + scroll.height + summary.height
                 if (browseStep == 0)
                     browseStep = (browser.grid.getChildAt(0)?.height ?: dp(180)) + dp(10)
-                val offset = if (state.expanded) minOf(header, (position / 6) * browseStep) else 0
+                val offset = if (state.expanded) minOf(header, (position / columns) * browseStep) else 0
                 if (headerOffset != offset) {
                     headerOffset = offset
                     requestLayout()

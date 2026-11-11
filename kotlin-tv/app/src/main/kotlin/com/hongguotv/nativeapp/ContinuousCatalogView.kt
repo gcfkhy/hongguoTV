@@ -429,7 +429,9 @@ internal class CatalogPosterCard(context: Context) : LinearLayout(context) {
             (4 * density).toInt(),
             (9 * density).toInt(),
         )
-        val width = (resources.displayMetrics.widthPixels * .9f - 14 * density * 5) / 6
+        val columns = DeviceUi.catalogColumns(context)
+        val width =
+            (resources.displayMetrics.widthPixels * .9f - 14 * density * (columns - 1)) / columns
         preferredHeight = (width / TvStyle.POSTER_ASPECT).toInt()
         poster.addView(image, FrameLayout.LayoutParams(-1, -1))
         poster.addView(
