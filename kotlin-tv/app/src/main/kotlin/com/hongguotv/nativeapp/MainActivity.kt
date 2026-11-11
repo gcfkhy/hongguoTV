@@ -5195,6 +5195,18 @@ class MainActivity : Activity() {
     private fun createTouchPage(target: TouchTab, segment: Int): TouchPage {
         tab = legacyTabIndex(target, segment)
         return when (target) {
+            TouchTab.Home ->
+                HomePage(
+                    HostBridge(),
+                    homeFeedState,
+                    PublicFeedBackend(
+                        library.maxQuality,
+                        account = cloudAccount.recommendationCredentials(),
+                        startupCache = cloudAccount.recommendationStartupCache(),
+                    ),
+                    Media3TrialPlayback(this),
+                    autoPreview = library.homeAutoplay,
+                )
             TouchTab.Discover -> DiscoverPage(HostBridge(), segment)
             TouchTab.Library -> LibraryPage(HostBridge(), segment) { touchShell?.show(TouchTab.Discover) }
             else -> PlaceholderPage("开发中")
@@ -5437,6 +5449,7 @@ class MainActivity : Activity() {
                 waiting?.apply?.invoke()
             }
             homeFeed?.resume()
+            if (DeviceUi.touchFirst(this)) touchShell?.foreground(true)
             if (screen == "catalog" && tab != 0) favoriteMonitor.check()
             if (screen == "player") syncMediaSession()
         } else libraryLoadError?.let(::showLibraryError)
@@ -5449,6 +5462,7 @@ class MainActivity : Activity() {
         social.foreground(false)
         updater.pause()
         homeFeed?.pause()
+        if (DeviceUi.touchFirst(this)) touchShell?.foreground(false)
         foreground = false
         main.removeCallbacks(tick)
         cancelRecovery()

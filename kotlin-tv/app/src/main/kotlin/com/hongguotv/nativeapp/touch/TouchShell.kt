@@ -86,6 +86,11 @@ internal class TouchShell(
         paintNavigation()
     }
 
+    /** App lifecycle: pause or resume the visible page (e.g. when the activity backgrounds). */
+    fun foreground(value: Boolean) {
+        if (value) visiblePage?.onShow() else visiblePage?.onHide()
+    }
+
     fun close() {
         pages.values.forEach { it.close() }
         pages.clear()
