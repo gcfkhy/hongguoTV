@@ -28,6 +28,7 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.PlayerView
 import com.hongguotv.core.*
+import com.hongguotv.nativeapp.touch.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -279,6 +280,9 @@ class MainActivity : Activity() {
     private var catalog = emptyList<Series>()
     private var hasMore = false
     private var catalogFocus = ""
+    private var touchShell: TouchShell? = null
+    private var touchSheet: TouchSheet? = null
+    private var touchShown = false
 
     private data class CatalogState(
         val page: Int,
@@ -961,6 +965,25 @@ class MainActivity : Activity() {
         focusNav: Boolean = false,
         focusType: Boolean = false,
     ) {
+        if (DeviceUi.touchFirst(this)) {
+            screen = "catalog"
+            relatedSection = null
+            detailTrail.clear()
+            reservationFilters.clear()
+            initialCatalogPending = false
+            restoreStoppedPage = false
+            pendingDetail = null
+            invalidatePage()
+            releaseCatalogViews()
+            val shell = ensureTouchShell()
+            if (touchShown) shell.show(shell.currentTab)
+            else {
+                touchShown = true
+                val (target, segment) = TouchTab.fromLegacyIndex(tab)
+                shell.show(target, segment)
+            }
+            return
+        }
         val loadRemote = load && !localCatalog()
         relatedSection = null
         detailTrail.clear()
@@ -4924,6 +4947,17 @@ class MainActivity : Activity() {
             finish()
             return
         }
+        if (DeviceUi.touchFirst(this)) {
+            when (screen) {
+                "player" ->
+                    if (waitingForFirstFrame) returnToDetail()
+                    else if (hud.visibility == View.VISIBLE && !playError) hidePlaybackOverlay()
+                    else returnToDetail()
+                "detail" -> detailBack()
+                else -> if (touchShell?.back() != true) finish()
+            }
+            return
+        }
         if (screen == "catalog" && tab == 6) {
             if (settingsRows.any { it.hasFocus() }) { settingsSidebar.getOrNull(settingsGroup)?.requestFocus(); return }
             if (settingsSidebar.any { it.hasFocus() }) { nav[6].requestFocus(); return }
@@ -4943,18 +4977,7 @@ class MainActivity : Activity() {
                 if (waitingForFirstFrame) returnToDetail()
                 else if (hud.visibility == View.VISIBLE && !playError) hidePlaybackOverlay()
                 else returnToDetail()
-            "detail" -> {
-                val previous = detailTrail.pollLast()
-                if (previous == null) showCatalog()
-                else {
-                    detail = previous.detail
-                    detailCloudProgress = previous.cloudProgress
-                    detailCloudScope = previous.cloudScope
-                    episodeIndex = previous.episode
-                    group = previous.group
-                    showDetail(false)
-                }
-            }
+            "detail" -> detailBack()
             else ->
                 if (tab == 1 && query.isNotBlank()) returnToDiscovery()
                 else if (collection != null) {
@@ -4966,6 +4989,86 @@ class MainActivity : Activity() {
                         nav[0].requestFocus()
                     } else finish()
                 } else nav.getOrNull(tab)?.requestFocus()
+        }
+    }
+
+    private fun ensureTouchShell(): TouchShell =
+        touchShell
+            ?: TouchShell(HostBridge(), root) { target, segment -> createTouchPage(target, segment) }
+                .also { touchShell = it }
+
+    private fun createTouchPage(target: TouchTab, segment: Int): TouchPage {
+        tab = legacyTabIndex(target, segment)
+        return PlaceholderPage("开发中")
+    }
+
+    private fun legacyTabIndex(target: TouchTab, segment: Int): Int =
+        when (target) {
+            TouchTab.Home -> 0
+            TouchTab.Discover -> if (segment <= 0) 1 else 2
+            TouchTab.Library -> 3 + segment.coerceIn(0, 2)
+            TouchTab.Me -> 6
+        }
+
+    private fun touchSheet(): TouchSheet =
+        touchSheet ?: TouchSheet(this).also { touchSheet = it }
+
+    /** Thin forwarding to the activity's state and playback engine. */
+    private inner class HostBridge : TouchHost {
+        override val activity: Activity get() = this@MainActivity
+        override val library: Library get() = this@MainActivity.library
+        override val account: AccountController get() = this@MainActivity.cloudAccount
+        override val repository: ContentRepository get() = this@MainActivity.repository
+        override val artwork: ArtworkLoader get() = this@MainActivity.artwork
+        override val sheet: TouchSheet get() = touchSheet()
+
+        override fun <T> work(action: () -> T, done: (T) -> Unit, failed: (Throwable) -> Unit) =
+            this@MainActivity.work(action, done, failed)
+
+        override fun openDetail(series: Series, resume: Boolean) =
+            this@MainActivity.openDetail(series, resume, autoplay = !resume)
+
+        override fun toggleLocalFavorite(series: Series): Boolean =
+            this@MainActivity.library.toggle(series)
+
+        override fun accountFavorite(series: Series, anchor: View) =
+            this@MainActivity.accountFavoriteAction(series, anchor)
+    }
+
+    /** Temporary page body until the real touch screens land in later tasks. */
+    private inner class PlaceholderPage(message: String) : TouchPage {
+        override val view: View =
+            FrameLayout(this@MainActivity).apply {
+                addView(
+                    TextView(this@MainActivity).apply {
+                        text = message
+                        setTextColor(TvStyle.muted)
+                        gravity = Gravity.CENTER
+                        textSize = 15f
+                    },
+                    FrameLayout.LayoutParams(-1, -1),
+                )
+            }
+
+        override fun onShow() = Unit
+
+        override fun onHide() = Unit
+
+        override fun onBack() = false
+
+        override fun close() = Unit
+    }
+
+    private fun detailBack() {
+        val previous = detailTrail.pollLast()
+        if (previous == null) showCatalog()
+        else {
+            detail = previous.detail
+            detailCloudProgress = previous.cloudProgress
+            detailCloudScope = previous.cloudScope
+            episodeIndex = previous.episode
+            group = previous.group
+            showDetail(false)
         }
     }
 
@@ -5068,6 +5171,10 @@ class MainActivity : Activity() {
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         if (!library.isLoaded) return
+        if (DeviceUi.touchFirst(this) && screen == "catalog") {
+            touchShell?.onConfigurationChanged()
+            return
+        }
         when (screen) {
             "player" -> {
                 val position = currentPosition()
@@ -5195,6 +5302,8 @@ class MainActivity : Activity() {
         library.close()
         artwork.close()
         releaseCatalogViews()
+        touchSheet?.dismiss()
+        touchShell?.close()
         mediaSession.release()
         main.removeCallbacksAndMessages(null)
         io.shutdownNow()
