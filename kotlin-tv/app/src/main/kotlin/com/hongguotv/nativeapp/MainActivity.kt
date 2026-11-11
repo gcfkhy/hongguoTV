@@ -2667,7 +2667,50 @@ class MainActivity : Activity() {
             preferCloud,
         )
 
+    private fun showTouchDetail() {
+        invalidatePage()
+        releaseCatalogViews()
+        screen = "detail"
+        val data = detail ?: return showCatalog()
+        val progress = detailProgress(data)
+        val visited = library.watched(data.series.id)
+        val page =
+            DetailPage(
+                HostBridge(),
+                data,
+                progress,
+                visited,
+                episodeIndex,
+                object : DetailPage.Actions {
+                    override fun play(index: Int, position: Long) {
+                        playEpisode(index, position)
+                    }
+
+                    override fun back() {
+                        goBack()
+                    }
+
+                    override fun openRelated(series: Series) {
+                        if (detailTrail.size >= 10) detailTrail.removeFirst()
+                        detailTrail.addLast(
+                            DetailVisit(data, episodeIndex, group, detailCloudProgress, detailCloudScope)
+                        )
+                        openDetail(series, fromRelated = true)
+                    }
+
+                    override fun comments() {
+                        social.showComments(root)
+                    }
+                },
+            )
+        ensureTouchShell().showFullscreenPage(page.view)
+    }
+
     private fun showDetail(focusEpisode: Boolean) {
+        if (DeviceUi.touchFirst(this)) {
+            showTouchDetail()
+            return
+        }
         invalidatePage()
         releaseCatalogViews()
         screen = "detail"
