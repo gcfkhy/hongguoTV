@@ -381,7 +381,9 @@ class MainActivity : Activity() {
             }
         }
     private val hideHud = Runnable {
-        if (screen == "player" && player?.isPlaying == true && !playError && !waitingForFirstFrame && root.hasWindowFocus())
+        if (screen == "player" && player?.isPlaying == true && !playError && !waitingForFirstFrame &&
+            root.hasWindowFocus() && !(DeviceUi.touchFirst(this) && playerChromeOpen())
+        )
             hidePlaybackOverlay()
     }
     private val seekRunnable = Runnable {
@@ -3138,7 +3140,7 @@ class MainActivity : Activity() {
             view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyVideoRotation() }
             view.post { if (playerView === view) applyVideoRotation() }
             if (DeviceUi.touchFirst(this)) {
-                val chrome = PlayerChrome(this, playerChromeActions())
+                val chrome = PlayerChrome(this, playerChromeActions()) { playerChromeOpen() }
                 playerChrome = chrome
                 chrome.install(root, view)
                 hud = chrome.views.hud
@@ -4200,6 +4202,11 @@ class MainActivity : Activity() {
         }
         relayDialog = dialog
         dialog.show()
+        if (DeviceUi.touchFirst(this))
+            dialog.window?.setLayout(
+                minOf(dp(420), resources.displayMetrics.widthPixels - dp(32)),
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            )
     }
 
     private fun playerFailure(problem: Throwable) {
@@ -4488,7 +4495,7 @@ class MainActivity : Activity() {
 
             override fun showSpeed() = showSpeedPicker(playbackTitle)
 
-            override fun showMore() = showPanel()
+            override fun showMore() = showTouchPlaybackSettings()
 
             override fun showComments() = social.showComments(playbackTitle)
 
@@ -4565,22 +4572,32 @@ class MainActivity : Activity() {
     private fun showSleepPicker(anchor: TextView) {
         val labels =
             listOf("关闭定时停止", "15 分钟后", "30 分钟后", "60 分钟后", "90 分钟后", "本集播完", "再播完 3 集", "再播完 5 集")
+        if (DeviceUi.touchFirst(this)) {
+            touchSheet().choose("定时停止 · ${sleepTimer.label()}", labels, -1) { choice ->
+                applySleepChoice(choice)
+            }
+            return
+        }
         tvTools.choose(
             "定时停止 · ${sleepTimer.label()}",
             labels,
             anchor,
             { choice ->
-                when (choice) {
-                    0 -> sleepTimer.cancel()
-                    in 1..4 -> sleepTimer.afterMinutes(listOf(15, 30, 60, 90)[choice - 1])
-                    else -> sleepTimer.afterEpisodes(listOf(1, 3, 5)[choice - 5])
-                }
-                if (sleepTimer.episodesLeft == 1) cancelPrefetch()
+                applySleepChoice(choice)
                 if (anchor.tag != "playback-settings") anchor.text = "定时 ${sleepTimer.label()}"
-                updatePlaybackText()
-                showHud()
             },
         )
+    }
+
+    private fun applySleepChoice(choice: Int) {
+        when (choice) {
+            0 -> sleepTimer.cancel()
+            in 1..4 -> sleepTimer.afterMinutes(listOf(15, 30, 60, 90)[choice - 1])
+            else -> sleepTimer.afterEpisodes(listOf(1, 3, 5)[choice - 5])
+        }
+        if (sleepTimer.episodesLeft == 1) cancelPrefetch()
+        updatePlaybackText()
+        showHud()
     }
 
     private fun applyVideoRotation() {
@@ -4594,24 +4611,38 @@ class MainActivity : Activity() {
         view.rotation=library.videoRotation.toFloat()
     }
     private fun showRotationPicker(anchor: TextView) {
-        tvTools.choose("画面旋转 · 仅旋转视频",VideoRotation.options.map { "${it}°" },anchor,{ index ->
-            val previous=library.videoRotation; val next=VideoRotation.options[index]
-            if(previous==next) return@choose
-            val rebuild=screen=="player" && playerView!=null && VideoRotation.requiresSurfaceRebuild(previous,next)
-            val selectedEpisode=episodeIndex; val position=currentPosition()
-            val autoplay=if(playbackReady) player?.playWhenReady ?: requestedAutoplay else requestedAutoplay
-            val ticket=generation
-            library.videoRotation=next
-            if(rebuild) {
-                // Let the picker finish dismissal before replacing its anchor and the video view.
-                // Rebuild only for a SurfaceView/TextureView transition, never on a layout callback.
-                main.post {
-                    if(screen=="player" && generation==ticket)
-                        playEpisode(selectedEpisode,position,autoplay,recreateView=true)
-                }
-            } else applyVideoRotation()
+        val labels = VideoRotation.options.map { "${it}°" }
+        if (DeviceUi.touchFirst(this)) {
+            touchSheet().choose("画面旋转 · 仅旋转视频", labels, VideoRotation.options.indexOf(library.videoRotation)) { index ->
+                applyRotationChoice(index)
+            }
+            return
+        }
+        tvTools.choose("画面旋转 · 仅旋转视频",labels,anchor,{ index ->
+            applyRotationChoice(index)
             if(anchor.tag!="playback-settings") anchor.text="画面旋转  ·  ${library.videoRotation}°"
         })
+    }
+    private fun applyRotationChoice(index: Int) {
+        val previous = library.videoRotation
+        val next = VideoRotation.options[index]
+        if (previous == next) return
+        val rebuild =
+            screen == "player" && playerView != null &&
+                VideoRotation.requiresSurfaceRebuild(previous, next)
+        val selectedEpisode = episodeIndex
+        val position = currentPosition()
+        val autoplay = if (playbackReady) player?.playWhenReady ?: requestedAutoplay else requestedAutoplay
+        val ticket = generation
+        library.videoRotation = next
+        if (rebuild) {
+            // Let the picker finish dismissal before replacing its anchor and the video view.
+            // Rebuild only for a SurfaceView/TextureView transition, never on a layout callback.
+            main.post {
+                if (screen == "player" && generation == ticket)
+                    playEpisode(selectedEpisode, position, autoplay, recreateView = true)
+            }
+        } else applyVideoRotation()
     }
     private fun updatePersistentProgress() {
         if (persistentProgress == null || !library.isLoaded) return
@@ -4631,9 +4662,17 @@ class MainActivity : Activity() {
         }
 
     private fun showFramePicker(anchor: TextView, inPlayer: Boolean) {
+        val labels = listOf("完整画面 · 保留比例与全部内容", "等比铺满 · 会裁掉部分画面与字幕", "拉伸铺满 · 画面比例会改变")
+        if (DeviceUi.touchFirst(this)) {
+            touchSheet().choose("全局画面模式", labels, library.frameMode.ordinal) { index ->
+                library.frameMode = VideoFrameMode.entries[index]
+                playerView?.resizeMode = frameResizeMode()
+            }
+            return
+        }
         tvTools.choose(
             "全局画面模式",
-            listOf("完整画面 · 保留比例与全部内容", "等比铺满 · 会裁掉部分画面与字幕", "拉伸铺满 · 画面比例会改变"),
+            labels,
             anchor,
             { index ->
                 library.frameMode = VideoFrameMode.entries[index]
@@ -4763,45 +4802,12 @@ class MainActivity : Activity() {
             addButton(options, "播放设置") {
                     tvTools.choose(
                         "播放设置",
-                        listOf(
-                            "倍速 ${PlaybackSpeed.label(library.playbackSpeed)}",
-                            "清晰度 ${library.maxQuality}P",
-                            "画面 ${library.frameMode.label}",
-                            "定时 ${sleepTimer.label()}",
-                            "伴机代解码 ${if (relayStore.enabled) "开" else "关"}",
-                            "从头播放",
-                            "重置设备能力记录",
-                            "画面旋转 ${library.videoRotation}°",
-                            "常驻播放进度 ${if (library.alwaysShowProgress) "开启" else "关闭"}",
-                        ),
+                        currentPlaybackOptions(),
                         more,
                         { choice ->
                             main.post {
                                 if (screen == "player" && more.isAttachedToWindow)
-                                    when (choice) {
-                                        0 -> showSpeedPicker(more)
-                                        1 -> showQualityPicker(more, true)
-                                        2 -> showFramePicker(more, true)
-                                        3 -> showSleepPicker(more)
-                                        4 -> showRelaySettings(more)
-                                        5 -> {
-                                            seekTo(0)
-                                            hidePanel()
-                                        }
-                                        7 -> showRotationPicker(more)
-                                        8 -> { library.alwaysShowProgress = !library.alwaysShowProgress; updatePersistentProgress() }
-                                        6 -> {
-                                            val count = CodecCapabilities.learnedCount()
-                                            CodecCapabilities.resetLearned()
-                                            android.util.Log.i(
-                                                "HongguoTV",
-                                                "Decoder capability lessons reset ($count entries)",
-                                            )
-                                            playbackText.text =
-                                                if (count > 0) "已清除 $count 条设备能力记录，重新按解码器实际能力选流"
-                                                else "暂无设备能力记录"
-                                        }
-                                    }
+                                    applyPlaybackSetting(choice, more)
                             }
                         },
                     )
@@ -4811,8 +4817,69 @@ class MainActivity : Activity() {
         showHud()
     }
 
+    private fun currentPlaybackOptions(): List<String> =
+        PlayerSheets.moreOptions(
+            speedLabel = PlaybackSpeed.label(library.playbackSpeed),
+            quality = library.maxQuality,
+            frameLabel = library.frameMode.label,
+            sleepLabel = sleepTimer.label(),
+            relayEnabled = relayStore.enabled,
+            rotation = library.videoRotation,
+            alwaysShowProgress = library.alwaysShowProgress,
+        )
+
+    /** 播放设置的二级入口，电视面板与触摸弹层共用。 */
+    private fun applyPlaybackSetting(choice: Int, anchor: TextView) {
+        when (choice) {
+            0 -> showSpeedPicker(anchor)
+            1 -> showQualityPicker(anchor, true)
+            2 -> showFramePicker(anchor, true)
+            3 -> showSleepPicker(anchor)
+            4 -> showRelaySettings(anchor)
+            5 -> {
+                seekTo(0)
+                hidePanel()
+            }
+            7 -> showRotationPicker(anchor)
+            8 -> {
+                library.alwaysShowProgress = !library.alwaysShowProgress
+                updatePersistentProgress()
+            }
+            6 -> {
+                val count = CodecCapabilities.learnedCount()
+                CodecCapabilities.resetLearned()
+                android.util.Log.i(
+                    "HongguoTV",
+                    "Decoder capability lessons reset ($count entries)",
+                )
+                playbackText.text =
+                    if (count > 0) "已清除 $count 条设备能力记录，重新按解码器实际能力选流"
+                    else "暂无设备能力记录"
+            }
+        }
+    }
+
+    /** 触摸播放器的"播放设置"：入口列表与二级弹层都走 TouchSheet。 */
+    private fun showTouchPlaybackSettings() {
+        if (playError) return
+        touchSheet().choose("播放设置", currentPlaybackOptions(), -1) { choice ->
+            applyPlaybackSetting(choice, playbackTitle)
+        }
+    }
+
     private fun showSpeedPicker(anchor: TextView, inPlayer: Boolean = true) {
         val speeds = PlaybackSpeed.options
+        if (DeviceUi.touchFirst(this)) {
+            touchSheet().choose("全局默认倍速", speeds.map(PlaybackSpeed::label), speeds.indexOf(library.playbackSpeed)) { index ->
+                library.playbackSpeed = speeds[index]
+                if (inPlayer) player?.setPlaybackSpeed(library.playbackSpeed)
+                if (inPlayer) {
+                    updatePlaybackText()
+                    showHud()
+                }
+            }
+            return
+        }
         tvTools.choose("全局默认倍速", speeds.map(PlaybackSpeed::label), anchor, { index ->
             library.playbackSpeed = speeds[index]
             if (inPlayer) player?.setPlaybackSpeed(library.playbackSpeed)
@@ -4824,6 +4891,16 @@ class MainActivity : Activity() {
 
     private fun showQualityPicker(anchor: TextView, inPlayer: Boolean) {
         val options = PlaybackQuality.options
+        if (DeviceUi.touchFirst(this)) {
+            touchSheet().choose("全局默认清晰度", options.map { "${it}P" }, options.indexOf(library.maxQuality)) { index ->
+                val target = options[index]
+                val changed = library.maxQuality != target
+                library.maxQuality = target
+                if (inPlayer && changed)
+                    playEpisode(episodeIndex, currentPosition(), player?.playWhenReady ?: requestedAutoplay)
+            }
+            return
+        }
         tvTools.choose("全局默认清晰度", options.map { "${it}P" }, anchor, { index ->
             val target = options[index]
             val changed = library.maxQuality != target
@@ -4838,6 +4915,26 @@ class MainActivity : Activity() {
     private fun showEpisodePanel(anchor: View) {
         val data = detail ?: return
         if (episodePanel != null) return
+        if (DeviceUi.touchFirst(this)) {
+            // 触摸弹层不暂停播放，关闭后观看不中断。
+            val progress = library.progress(data.series.id)
+            val marks = mutableMapOf(episodeIndex to "当前")
+            if (progress != null) {
+                if (progress.episodeIndex in data.episodes.indices && progress.episodeIndex != episodeIndex)
+                    marks[progress.episodeIndex] = if (progress.completed) "已看" else "上次"
+                for (episode in 0 until minOf(progress.episodeIndex, data.episodes.size))
+                    marks.putIfAbsent(episode, "已看")
+            }
+            touchSheet().grid(
+                "选集 · 共 ${data.episodes.size} 集",
+                data.episodes.size,
+                episodeIndex,
+                marks,
+            ) { selected ->
+                if (selected == episodeIndex) showHud() else playEpisode(selected)
+            }
+            return
+        }
         val ticket = generation
         val overlayWasVisible = hud.visibility == View.VISIBLE
         requestedAutoplay = player?.playWhenReady ?: requestedAutoplay

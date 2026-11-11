@@ -73,8 +73,36 @@ internal interface PlayerChromeActions {
     fun back()
 }
 
+/** Labels of the player "播放设置" list, shared by the TV panel and the touch sheets. */
+internal object PlayerSheets {
+    fun moreOptions(
+        speedLabel: String,
+        quality: Int,
+        frameLabel: String,
+        sleepLabel: String,
+        relayEnabled: Boolean,
+        rotation: Int,
+        alwaysShowProgress: Boolean,
+    ): List<String> =
+        listOf(
+            "倍速 $speedLabel",
+            "清晰度 ${quality}P",
+            "画面 $frameLabel",
+            "定时 $sleepLabel",
+            "伴机代解码 ${if (relayEnabled) "开" else "关"}",
+            "从头播放",
+            "重置设备能力记录",
+            "画面旋转 ${rotation}°",
+            "常驻播放进度 ${if (alwaysShowProgress) "开启" else "关闭"}",
+        )
+}
+
 /** Touch transport overlay plus tap, drag and long-press gestures. */
-internal class PlayerChrome(context: Context, private val actions: PlayerChromeActions) {
+internal class PlayerChrome(
+    context: Context,
+    private val actions: PlayerChromeActions,
+    private val modalOpen: () -> Boolean = { false },
+) {
     class Views(
         val hud: android.widget.LinearLayout,
         val title: android.widget.TextView,
@@ -227,8 +255,15 @@ internal class PlayerChrome(context: Context, private val actions: PlayerChromeA
         cancelAutoHide()
         if (!actions.state().playing) return
         val runnable =
-            Runnable {
-                if (actions.state().playing && !actions.state().error) views.hud.visibility = View.GONE
+            object : Runnable {
+                override fun run() {
+                    // Sheets and dialogs own the screen while open; retry once they close.
+                    if (modalOpen()) {
+                        main.postDelayed(this, PlayerGestures.AUTO_HIDE_MS)
+                        return
+                    }
+                    if (actions.state().playing && !actions.state().error) views.hud.visibility = View.GONE
+                }
             }
         autoHide = runnable
         main.postDelayed(runnable, PlayerGestures.AUTO_HIDE_MS)

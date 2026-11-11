@@ -10,6 +10,7 @@ import android.view.*
 import android.widget.*
 import androidx.media3.common.Player
 import com.hongguotv.core.*
+import com.hongguotv.nativeapp.touch.TouchTheme
 import java.util.concurrent.Executors
 import org.json.JSONObject
 
@@ -38,6 +39,7 @@ class TvSocial(
     private var failedAt = 0L
     private var timedStatus = "尚未读取"
     private val pages = linkedMapOf<Long, JSONObject>()
+    private val touch = DeviceUi.touchFirst(activity)
 
     private fun dp(n: Int) = (n * activity.resources.displayMetrics.density).toInt()
 
@@ -155,12 +157,28 @@ class TvSocial(
 
     private fun button(text: String, action: () -> Unit) =
         label(text).apply {
-            enableRemoteFocus()
             minHeight = dp(48)
-            background = TvStyle.card(activity, false)
-            setOnFocusChangeListener { _, focus -> background = TvStyle.card(activity, focus) }
+            if (touch) {
+                isFocusable = false
+                textSize = TouchTheme.TEXT_BODY
+                background = TouchTheme.pressable(activity, TouchTheme.raised)
+            } else {
+                enableRemoteFocus()
+                background = TvStyle.card(activity, false)
+                setOnFocusChangeListener { _, focus -> background = TvStyle.card(activity, focus) }
+            }
             setOnClickListener { action() }
         }
+
+    /** 触摸模式弹窗贴底、占满宽度；电视保持原来的窄面板。 */
+    private fun applyTouchSheetWindow(d: Dialog, height: Int) {
+        d.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setGravity(Gravity.BOTTOM)
+            setDimAmount(0.5f)
+            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, height)
+        }
+    }
 
     fun settings(anchor: View) {
         val d = Dialog(activity)
@@ -169,9 +187,9 @@ class TvSocial(
             LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(18), dp(12), dp(18), dp(12))
-                background = TvVisual.panel(activity)
+                if (touch) setBackgroundColor(TouchTheme.raised) else background = TvVisual.panel(activity)
             }
-        body.addView(label("弹幕设置", 22f))
+        body.addView(label("弹幕设置", if (touch) 18f else 22f))
         val refreshers = mutableListOf<() -> Unit>()
         fun option(title: () -> String, parent: LinearLayout = body, action: () -> Unit) {
             lateinit var b: TextView
@@ -267,10 +285,13 @@ class TvSocial(
         body.addView(label("真实时间轴弹幕；无内容时不使用普通评论代替。", 14f))
         body.addView(button("关闭") { d.dismiss() })
         d.setContentView(ScrollView(activity).apply { addView(body) })
-        d.setOnDismissListener { if (anchor.isAttachedToWindow) anchor.requestFocus() }
+        d.setOnDismissListener { if (!touch && anchor.isAttachedToWindow) anchor.requestFocus() }
         d.show()
-        d.window?.setLayout(dp(440), -2)
-        body.getChildAt(1).requestFocus()
+        if (touch) applyTouchSheetWindow(d, (activity.resources.displayMetrics.heightPixels * .75f).toInt())
+        else {
+            d.window?.setLayout(dp(440), -2)
+            body.getChildAt(1).requestFocus()
+        }
     }
 
     fun showComments(anchor: View, target: Pair<String, String>? = null) {
@@ -297,9 +318,9 @@ class TvSocial(
             LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(16), dp(12), dp(16), dp(12))
-                background = TvVisual.panel(activity)
+                if (touch) setBackgroundColor(TouchTheme.raised) else background = TvVisual.panel(activity)
             }
-        body.addView(label("评论与剧评", 22f))
+        body.addView(label("评论与剧评", if (touch) 18f else 22f))
         val tabs = LinearLayout(activity)
         body.addView(tabs)
         val status = label("匿名读取 · 点赞数量只读", 14f)
@@ -323,12 +344,17 @@ class TvSocial(
             val card =
                 LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
-                    enableRemoteFocus()
                     setPadding(dp(12), dp(10), dp(12), dp(12))
-                    background = TvStyle.card(activity, false)
                     contentDescription = "$author，$content"
-                    setOnFocusChangeListener { _, focused ->
-                        background = TvStyle.card(activity, focused)
+                    if (touch) {
+                        isFocusable = false
+                        background = TouchTheme.pressable(activity, TouchTheme.surface)
+                    } else {
+                        enableRemoteFocus()
+                        background = TvStyle.card(activity, false)
+                        setOnFocusChangeListener { _, focused ->
+                            background = TvStyle.card(activity, focused)
+                        }
                     }
                 }
             card.addView(
@@ -447,19 +473,23 @@ class TvSocial(
             disposed = true
             commentScope?.cancel()
             if (dialog === d) dialog = null
-            if (anchor.isAttachedToWindow) anchor.requestFocus()
+            if (!touch && anchor.isAttachedToWindow) anchor.requestFocus()
         }
         d.show()
-        d.window?.apply {
-            setBackgroundDrawableResource(android.R.color.transparent)
-            setGravity(Gravity.END)
-            setDimAmount(0f)
-            setLayout(
-                minOf(dp(500), (activity.resources.displayMetrics.widthPixels * .65).toInt()),
-                -1,
-            )
+        if (touch) {
+            applyTouchSheetWindow(d, (activity.resources.displayMetrics.heightPixels * .8f).toInt())
+        } else {
+            d.window?.apply {
+                setBackgroundDrawableResource(android.R.color.transparent)
+                setGravity(Gravity.END)
+                setDimAmount(0f)
+                setLayout(
+                    minOf(dp(500), (activity.resources.displayMetrics.widthPixels * .65).toInt()),
+                    -1,
+                )
+            }
+            tabs.getChildAt(0).requestFocus()
         }
-        tabs.getChildAt(0).requestFocus()
         read()
     }
 
