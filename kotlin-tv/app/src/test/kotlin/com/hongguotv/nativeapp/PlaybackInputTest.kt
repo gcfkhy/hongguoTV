@@ -74,22 +74,22 @@ class PlaybackInputTest {
 
     @Test
     @Config(sdk = [26], qualifiers = "w360dp-h800dp-port-mdpi")
-    fun phoneDefaultsToPortrait() {
+    fun phoneFollowsTheSensor() {
         val context = RuntimeEnvironment.getApplication()
         assertEquals(DeviceUi.Form.Phone, DeviceUi.form(context))
         assertEquals(
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT,
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR,
             DeviceUi.preferredOrientation(context),
         )
     }
 
     @Test
     @Config(sdk = [26], qualifiers = "sw720dp-w1280dp-h800dp-land-mdpi")
-    fun tabletDefaultsToLandscape() {
+    fun tabletAlsoFollowsTheSensor() {
         val context = RuntimeEnvironment.getApplication()
         assertEquals(DeviceUi.Form.Tablet, DeviceUi.form(context))
         assertEquals(
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR,
             DeviceUi.preferredOrientation(context),
         )
     }

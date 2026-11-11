@@ -32,11 +32,8 @@ object DeviceUi {
     fun tablet(context: Context) = form(context) == Form.Tablet
 
     fun preferredOrientation(context: Context): Int =
-        when (form(context)) {
-            Form.Phone -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-            Form.Tablet,
-            Form.Television -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        }
+        if (television(context)) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        else ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
 
     fun catalogColumns(context: Context): Int {
         val width = context.resources.configuration.screenWidthDp
