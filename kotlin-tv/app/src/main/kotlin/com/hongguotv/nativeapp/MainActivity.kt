@@ -164,6 +164,8 @@ class MainActivity : Activity() {
     private val sleepTimer = SleepTimer { android.os.SystemClock.elapsedRealtime() }
     private var sleepStopped = false
     private var playerView: PlayerView? = null
+    private var playerChrome: PlayerChrome? = null
+    private var fullscreenController: FullscreenController? = null
     private val social by lazy {
         TvSocial(
             this,
@@ -3131,11 +3133,23 @@ class MainActivity : Activity() {
                     setShutterBackgroundColor(Color.BLACK)
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                 }
-            attachPlayerGestures(view)
             playerView = view
             root.addView(view, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
             view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyVideoRotation() }
             view.post { if (playerView === view) applyVideoRotation() }
+            if (DeviceUi.touchFirst(this)) {
+                val chrome = PlayerChrome(this, playerChromeActions())
+                playerChrome = chrome
+                chrome.install(root, view)
+                hud = chrome.views.hud
+                playbackTitle = chrome.views.title
+                playbackText = chrome.views.status
+                progressBar = chrome.views.progress
+                controls = chrome.views.controls
+                fullscreenController = FullscreenController(this).also { it.enterImmersive() }
+                social.attach(root)
+            } else {
+            attachPlayerGestures(view)
             persistentTime = text("", 12f, white)
             persistentBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progressTintList = android.content.res.ColorStateList.valueOf(accent) }
             persistentProgress = column().apply {
@@ -3229,6 +3243,7 @@ class MainActivity : Activity() {
                 },
                 FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM),
             )
+            }
         }
         playbackTitle.text = "${data.series.title}  ·  第 ${episodeIndex+1} 集"
         playbackText.text = preparingPlaybackText(recoveryDisplayActive, lastPlaybackFailure, false) +
@@ -3243,7 +3258,7 @@ class MainActivity : Activity() {
         if (recoveryDisplayActive) {
             addButton(controls, "取消恢复") { stopPreparingPlayback() }
             addButton(controls, "返回选集") { returnToDetail(true) }
-        } else if (DeviceUi.touchFirst(this) && hud.visibility == View.VISIBLE) showTouchTransport()
+        } else if (DeviceUi.touchFirst(this) && hud.visibility == View.VISIBLE) playerChrome?.show()
         transportPlay = null
         sleepButton = null
         syncMediaSession()
@@ -4314,6 +4329,7 @@ class MainActivity : Activity() {
         controls.visibility = View.GONE
         controls.clearFocus()
         hud.visibility = View.GONE
+        if (DeviceUi.touchFirst(this)) playerChrome?.hide()
         updatePersistentProgress()
         updateClock()
     }
@@ -4372,7 +4388,7 @@ class MainActivity : Activity() {
         updateClock()
         updatePlaybackText()
         if (DeviceUi.touchFirst(this) && !playError && !recoveryDisplayActive && !panel)
-            showTouchTransport()
+            playerChrome?.show()
         main.removeCallbacks(hideHud)
         if (player?.isPlaying == true) main.postDelayed(hideHud, if (panel) 8000 else 4500)
     }
@@ -4414,6 +4430,7 @@ class MainActivity : Activity() {
                 (if (sleepTimer.active) "  ·  定时 ${sleepTimer.label()}" else "")
         progressBar.progress =
             if (duration > 0) (position * 1000 / duration).toInt().coerceIn(0, 1000) else 0
+        playerChrome?.refresh()
     }
 
     private fun requestPlayback(play: Boolean) {
@@ -4443,6 +4460,40 @@ class MainActivity : Activity() {
         requestPlayback(
             !(if (playbackReady) player?.playWhenReady ?: requestedAutoplay else requestedAutoplay)
         )
+
+    private fun playerChromeActions(): PlayerChromeActions =
+        object : PlayerChromeActions {
+            override fun state(): PlayerState =
+                PlayerState(
+                    positionMs = currentPosition(),
+                    durationMs = player?.duration?.coerceAtLeast(0) ?: 0,
+                    playing = player?.playWhenReady == true && !pausedForLifecycle,
+                    buffering = player?.playbackState == Player.STATE_BUFFERING,
+                    ready = playbackReady,
+                    error = playError || recoveryDisplayActive,
+                )
+
+            override fun toggle() = togglePlayback()
+
+            override fun seekTo(ms: Long) = this@MainActivity.seekTo(ms)
+
+            override fun skip(direction: Int) = skipEpisode(direction)
+
+            override fun setSpeedTemporarily(speed: Float?) {
+                if (playError) return
+                player?.setPlaybackSpeed(speed ?: library.playbackSpeed)
+            }
+
+            override fun showEpisodes() = showEpisodePanel(playbackTitle)
+
+            override fun showSpeed() = showSpeedPicker(playbackTitle)
+
+            override fun showMore() = showPanel()
+
+            override fun showComments() = social.showComments(playbackTitle)
+
+            override fun back() = returnToDetail()
+        }
 
     private fun seekTo(position: Long) {
         val p = player ?: return
@@ -4661,7 +4712,7 @@ class MainActivity : Activity() {
     }
 
     private fun openPlaybackChrome() {
-        if (DeviceUi.touchFirst(this)) showTouchTransport() else showPanel()
+        if (DeviceUi.touchFirst(this)) playerChrome?.show() else showPanel()
     }
 
     private fun showPanel() {
@@ -4956,6 +5007,10 @@ class MainActivity : Activity() {
         playerListener = null
         video?.close()
         video = null
+        playerChrome?.hide()
+        playerChrome = null
+        fullscreenController?.exitImmersive()
+        fullscreenController = null
         playerView?.player = null
         playerView = null
         persistentProgress = null
@@ -5125,7 +5180,7 @@ class MainActivity : Activity() {
 
     private fun playerChromeOpen() =
         episodePanel != null || tvTools.showing || relayDialog?.isShowing == true ||
-            cloudAccount.showing
+            cloudAccount.showing || (DeviceUi.touchFirst(this) && touchSheet?.showing == true)
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (screen == "player") {
@@ -5224,11 +5279,13 @@ class MainActivity : Activity() {
             return
         }
         when (screen) {
-            "player" -> {
-                val position = currentPosition()
-                val autoplay = player?.playWhenReady == true && !pausedForLifecycle
-                playEpisode(episodeIndex, position, autoplay)
-            }
+            "player" ->
+                if (DeviceUi.touchFirst(this)) playerChrome?.relayout()
+                else {
+                    val position = currentPosition()
+                    val autoplay = player?.playWhenReady == true && !pausedForLifecycle
+                    playEpisode(episodeIndex, position, autoplay)
+                }
             "detail" -> if (detail != null) showDetail(false)
             else -> showCatalog()
         }

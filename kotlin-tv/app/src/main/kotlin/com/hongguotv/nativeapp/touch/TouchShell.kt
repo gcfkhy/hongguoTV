@@ -100,6 +100,12 @@ internal class TouchShell(
     }
 
     private fun ensureAttached() {
+        // The player clears the activity root, so restore the shell when coming back.
+        if (attached && content.parent !== root) {
+            attached = false
+            navigation = null
+            navItems.clear()
+        }
         if (attached) return
         attached = true
         root.removeAllViews()
